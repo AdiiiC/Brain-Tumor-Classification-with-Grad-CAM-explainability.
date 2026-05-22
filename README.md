@@ -1,17 +1,22 @@
 # Brain Tumor Classification Using Deep Learning & Grad-CAM
 
-A Deep Learning project for brain tumor classification using MRI images. This project uses Convolutional Neural Networks (CNNs) to classify brain tumors and integrates Grad-CAM (Gradient-weighted Class Activation Mapping) for explainable AI and visual interpretation of predictions.
+A Deep Learning-based Brain Tumor Classification project that uses MRI images to classify brain tumors and applies Grad-CAM (Gradient-weighted Class Activation Mapping) for explainable AI visualization. The project uses Convolutional Neural Networks (CNNs) to learn image patterns and visually explain predictions by highlighting important regions in MRI scans.
+
+---
 
 ## Features
 
-- Brain tumor classification using MRI scans
-- Deep Learning-based image classification
-- Image preprocessing and normalization
+- Brain tumor classification using MRI images
+- Deep Learning-based image classification using CNNs
+- Automated dataset download using `opendatasets`
+- MRI image preprocessing and normalization
 - Model training and evaluation
-- Prediction on MRI images
-- Explainable AI using Grad-CAM
-- Heatmap visualization of tumor regions
-- Performance evaluation and visualization
+- Grad-CAM visualization for explainable AI
+- Prediction on MRI scans
+- Visualization of important tumor regions
+- Model performance analysis
+
+---
 
 ## Tech Stack
 
@@ -23,36 +28,65 @@ A Deep Learning project for brain tumor classification using MRI images. This pr
 - Matplotlib
 - Scikit-learn
 - Jupyter Notebook
+- opendatasets
+- Kaggle API
+
+---
+
+## Dataset
+
+This project uses the **Brain Tumor MRI Dataset** from Kaggle.
+
+Dataset:
+
+https://www.kaggle.com/datasets/masoudnickparvar/brain-tumor-mri-dataset
+
+The dataset is automatically downloaded using:
+
+```python
+import opendatasets as od
+
+od.download(
+    "https://www.kaggle.com/datasets/masoudnickparvar/brain-tumor-mri-dataset/data"
+)
+```
+
+### Dataset Classes
+
+The dataset contains MRI scans categorized into:
+
+- Glioma
+- Meningioma
+- Pituitary Tumor
+- No Tumor
+
+---
 
 ## Project Workflow
 
-1. Load MRI brain tumor image dataset
-2. Preprocess and normalize images
-3. Split data into training and testing sets
-4. Build and train CNN model
+1. Download MRI dataset from Kaggle
+2. Load and preprocess MRI images
+3. Normalize and prepare training data
+4. Train CNN model
 5. Evaluate model performance
 6. Predict tumor classes
 7. Generate Grad-CAM heatmaps
 8. Visualize important regions influencing predictions
 
-## Model Features
+---
 
-The model is designed to:
-
-- Learn patterns from MRI brain scans
-- Classify brain tumors using Deep Learning
-- Highlight important image regions using Grad-CAM
-- Improve model interpretability with explainable AI
-
-## Folder Structure
+## Project Structure
 
 ```bash
-├── Brain_Tumor_Classification_Using_DL_&_GradCAM.ipynb
-├── dataset/
-├── saved_model/
-├── outputs/
-├── README.md
+Brain-Tumor-Classification/
+│── Brain_Tumor_Classification_Using_DL_&_GradCAM.ipynb
+│── README.md
+│── requirements.txt
+│── .gitignore
+│── outputs/                  # Grad-CAM outputs & screenshots (optional)
 ```
+
+---
 
 ## Installation
 
@@ -63,11 +97,42 @@ git clone <your-repository-url>
 cd <repository-name>
 ```
 
-Install dependencies:
+Install required dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
+
+---
+
+## Kaggle API Setup
+
+To download the dataset, you need Kaggle API credentials.
+
+### Step 1: Create Kaggle API Token
+
+1. Login to Kaggle
+2. Go to **Account Settings**
+3. Click **Create New API Token**
+4. Download `kaggle.json`
+
+### Step 2: Configure Kaggle API
+
+Move `kaggle.json` to:
+
+**Windows**
+
+```text
+C:\Users\YourUsername\.kaggle\
+```
+
+**Linux / Mac**
+
+```bash
+~/.kaggle/
+```
+
+---
 
 ## Run the Project
 
@@ -83,29 +148,38 @@ Open:
 Brain_Tumor_Classification_Using_DL_&_GradCAM.ipynb
 ```
 
-## Example Workflow
+Run all cells.
+
+---
+
+## Example Output
 
 ### Input
 MRI brain scan image
 
 ### Output
-- Predicted brain tumor class
+- Predicted tumor type
 - Confidence score
-- Grad-CAM heatmap visualization showing important regions
+- Grad-CAM heatmap showing important regions influencing prediction
+
+---
 
 ## Grad-CAM Visualization
 
-Grad-CAM helps explain model predictions by highlighting regions of the MRI image that strongly influenced the classification decision.
+Grad-CAM (Gradient-weighted Class Activation Mapping) helps explain model predictions by highlighting regions of MRI scans that influenced the model’s decision.
 
-This improves:
+Benefits:
 
-- Model transparency
-- Explainability
-- Medical AI interpretability
+- Model explainability
+- Better interpretability
+- Medical AI transparency
+- Visualization of tumor-relevant regions
+
+---
 
 ## Evaluation Metrics
 
-Model performance may be evaluated using:
+The model performance is evaluated using:
 
 - Accuracy
 - Precision
@@ -113,14 +187,38 @@ Model performance may be evaluated using:
 - F1 Score
 - Confusion Matrix
 
+---
+
+## requirements.txt
+
+Example dependencies:
+
+```txt
+tensorflow
+keras
+numpy
+pandas
+matplotlib
+opencv-python
+scikit-learn
+seaborn
+jupyter
+opendatasets
+kaggle
+```
+
+---
+
 ## Future Improvements
 
 - Better CNN architectures (EfficientNet, ResNet)
 - Hyperparameter tuning
-- Web app deployment using Flask or Streamlit
-- Real-time MRI image prediction
-- Improved explainability methods
+- Real-time MRI prediction system
+- Web deployment using Flask or Streamlit
+- Improved explainability techniques
+
+---
 
 ## Author
 
-Adithya C
+Your Name
