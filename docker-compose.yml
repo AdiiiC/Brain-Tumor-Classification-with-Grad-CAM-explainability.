@@ -1,0 +1,36 @@
+services:
+  # ── Backend API ──────────────────────────────────────────────────────────
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - MODEL_PATH=model_best.keras
+      - TFLITE_PATH=brain_tumor_model.tflite
+      - CALIBRATION_TEMP=1.0
+    volumes:
+      - ./model_best.keras:/app/model_best.keras:ro
+      - ./brain_tumor_model.tflite:/app/brain_tumor_model.tflite:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Frontend (React) ─────────────────────────────────────────────────────
+  frontend:
+    build: ./website
+    ports:
+      - "3000:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # ── Federated Learning Server (optional) ─────────────────────────────────
+  federated-server:
+    build: .
+    command: ["python", "-m", "upgrades.federated"]
+    ports:
+      - "8080:8080"
+    profiles:
+      - federated

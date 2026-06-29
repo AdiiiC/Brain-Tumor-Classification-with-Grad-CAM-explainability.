@@ -1,0 +1,51 @@
+.interpret-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.interpret-card {
+  padding: 28px;
+}
+
+.interpret-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.interpret-icon.green { background: #ecfdf5; color: var(--success); }
+.interpret-icon.blue { background: #eff6ff; color: var(--primary); }
+.interpret-icon.amber { background: #fffbeb; color: var(--warning); }
+.interpret-icon.purple { background: #f5f3ff; color: #7c3aed; }
+.interpret-icon.red { background: #fef2f2; color: var(--danger); }
+.interpret-icon.teal { background: #f0fdfa; color: var(--accent); }
+
+.interpret-card h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 10px;
+  color: var(--text-primary);
+}
+
+.interpret-card p {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.interpret-card strong {
+  color: var(--text-primary);
+}
+
+@media (max-width: 1024px) {
+  .interpret-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 768px) {
+  .interpret-grid { grid-template-columns: 1fr; }
+}
