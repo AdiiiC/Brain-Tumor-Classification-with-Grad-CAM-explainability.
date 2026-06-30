@@ -1,0 +1,8 @@
+..
+../api
+../datasets
+../src
+../*.keras
+../*.tflite
+../requirements*.txt
+../.venv
