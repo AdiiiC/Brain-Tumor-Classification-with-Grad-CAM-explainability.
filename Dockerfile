@@ -17,6 +17,8 @@ COPY upgrades/ ./upgrades/
 
 # Copy model files (if present during build)
 COPY model_best.keras* ./
+COPY grade_classifier.keras* ./
+COPY patch_classifier.keras* ./
 COPY brain_tumor_model.tflite* ./
 
 EXPOSE 8000
