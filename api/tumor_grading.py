@@ -48,11 +48,29 @@ GRADE_INFO = {
 
 class TumorGrader:
     """
-    Estimate WHO tumor grade from classification output and image features.
+    Estimate WHO tumor grade using a trained binary grade classifier (HGG vs LGG)
+    combined with image feature analysis.
 
-    NOTE: This is a computational estimate for clinical decision support.
-    Definitive grading requires histopathological analysis of tissue biopsy.
+    The grade classifier is trained on:
+    - DICOM-multi dataset (105 patients with explicit WHO grade labels)
+    - LGG segmentation dataset (111 patients, all low-grade)
+    - BraTS 2021 (high-grade gliomas)
     """
+
+    def __init__(self):
+        self.grade_model = None
+        self._load_grade_model()
+
+    def _load_grade_model(self):
+        """Load the trained binary grade classifier if available."""
+        from pathlib import Path
+        import tensorflow as tf
+        grade_path = Path("grade_classifier.keras")
+        if grade_path.exists():
+            try:
+                self.grade_model = tf.keras.models.load_model(str(grade_path))
+            except Exception:
+                self.grade_model = None
 
     def estimate_grade(
         self,
@@ -87,15 +105,28 @@ class TumorGrader:
         heterogeneity = 0.5
         tumor_size_ratio = 0.3
         enhancement_pattern = "unknown"
+        model_grade_score = None
 
         if image is not None:
             heterogeneity = self._compute_heterogeneity(image)
             tumor_size_ratio = self._estimate_tumor_size(image, heatmap)
             enhancement_pattern = self._classify_enhancement(image, heatmap)
 
+            # Use trained grade classifier if available
+            if self.grade_model is not None:
+                try:
+                    img_input = cv2.resize(image.astype(np.uint8) if image.max() > 1 else (image * 255).astype(np.uint8),
+                                           (240, 240))
+                    if len(img_input.shape) == 2:
+                        img_input = cv2.cvtColor(img_input, cv2.COLOR_GRAY2RGB)
+                    batch = np.expand_dims(img_input.astype(np.float32), 0)
+                    model_grade_score = float(self.grade_model.predict(batch, verbose=0)[0][0])
+                except Exception:
+                    model_grade_score = None
+
         # Grade estimation by tumor type
         if predicted_class == "Glioma":
-            grade = self._grade_glioma(confidence, heterogeneity, tumor_size_ratio, enhancement_pattern)
+            grade = self._grade_glioma(confidence, heterogeneity, tumor_size_ratio, enhancement_pattern, model_grade_score)
         elif predicted_class == "Meningioma":
             grade = self._grade_meningioma(confidence, heterogeneity, tumor_size_ratio)
         elif predicted_class == "Pituitary":
@@ -121,15 +152,22 @@ class TumorGrader:
         }
 
     def _grade_glioma(self, confidence: float, heterogeneity: float,
-                      size_ratio: float, enhancement: str) -> dict:
-        """Grade glioma based on imaging features."""
+                      size_ratio: float, enhancement: str, model_grade_score: float = None) -> dict:
+        """Grade glioma using trained grade classifier + imaging features."""
         evidence = []
-        # Higher heterogeneity suggests higher grade
-        # Larger size suggests higher grade
-        # Ring enhancement suggests GBM (Grade IV)
 
         score = 0.0  # 0 = Grade I, 1 = Grade IV
 
+        # PRIMARY: Use trained grade classifier (HGG vs LGG) if available
+        if model_grade_score is not None:
+            # model_grade_score: 0 = low-grade, 1 = high-grade
+            score += model_grade_score * 0.5  # classifier gets 50% weight
+            if model_grade_score > 0.6:
+                evidence.append(f"Trained grade classifier: HIGH-grade ({model_grade_score:.0%} confidence)")
+            else:
+                evidence.append(f"Trained grade classifier: LOW-grade ({1 - model_grade_score:.0%} confidence)")
+
+        # SECONDARY: Image feature heuristics
         if heterogeneity > 0.6:
             score += 0.3
             evidence.append("High tissue heterogeneity (suggests higher grade)")

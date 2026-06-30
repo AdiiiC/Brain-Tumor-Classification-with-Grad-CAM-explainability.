@@ -18,17 +18,32 @@ from typing import Optional
 
 class SmallTumorDetector:
     """
-    Detect tumors < 5mm that standard classification may miss.
+    Detect tumors < 5mm using a dedicated trained patch classifier.
 
-    Uses multi-scale analysis and patch-based detection to find
-    small lesions that are below the resolution threshold of the
-    standard 240x240 input.
+    The patch classifier is trained on multi-scale patches (60px, 90px, 120px)
+    extracted from tumor and non-tumor training images. This enables detection
+    of small lesions below the resolution threshold of the main 240x240 model.
     """
 
     # Typical MRI pixel spacing (mm/pixel) for common scanners
     DEFAULT_PIXEL_SPACING = 0.5  # mm per pixel (approximate)
-    PATCH_SIZE = 240
+    PATCH_SIZE = 120  # patch classifier input size
     OVERLAP = 0.5  # 50% patch overlap
+
+    def __init__(self):
+        self.patch_model = None
+        self._load_patch_model()
+
+    def _load_patch_model(self):
+        """Load the trained patch classifier if available."""
+        from pathlib import Path
+        import tensorflow as tf
+        patch_path = Path("patch_classifier.keras")
+        if patch_path.exists():
+            try:
+                self.patch_model = tf.keras.models.load_model(str(patch_path))
+            except Exception:
+                self.patch_model = None
 
     def detect(
         self,
@@ -69,6 +84,10 @@ class SmallTumorDetector:
             results["note"] = "Image resolution too low for small tumor detection. Use original DICOM resolution."
             return results
 
+        # Use dedicated patch classifier if available, else fall back to main model
+        use_patch_model = self.patch_model is not None
+        results["classifier"] = "dedicated patch model" if use_patch_model else "main model (fallback)"
+
         # Multi-scale patch analysis
         detections = []
         scales = [1.0, 0.75, 0.5] if max(h_orig, w_orig) > 500 else [1.0, 0.75]
@@ -91,13 +110,21 @@ class SmallTumorDetector:
                     if gray_patch.mean() < 20:  # mostly black
                         continue
 
-                    # Predict
+                    # Predict using dedicated patch classifier or main model
                     patch_rgb = cv2.cvtColor(patch, cv2.COLOR_BGR2RGB) if len(patch.shape) == 3 else patch
                     patch_input = patch_rgb.astype(np.float32)
-                    batch = np.expand_dims(patch_input, 0)
 
-                    pred = model.predict(batch, verbose=0)[0]
-                    tumor_prob = float(pred[0] + pred[1] + pred[3])  # sum of tumor classes
+                    if use_patch_model:
+                        # Patch model: binary sigmoid → tumor probability
+                        patch_resized = cv2.resize(patch_input.astype(np.uint8), (120, 120)).astype(np.float32)
+                        batch = np.expand_dims(patch_resized, 0)
+                        tumor_prob = float(self.patch_model.predict(batch, verbose=0)[0][0])
+                    else:
+                        # Fallback: main 4-class model
+                        patch_resized = cv2.resize(patch_input.astype(np.uint8), (240, 240)).astype(np.float32)
+                        batch = np.expand_dims(patch_resized, 0)
+                        pred = model.predict(batch, verbose=0)[0]
+                        tumor_prob = float(pred[0] + pred[1] + pred[3])  # sum of tumor classes
                     patch_count += 1
 
                     if tumor_prob > threshold:
@@ -107,11 +134,10 @@ class SmallTumorDetector:
                         orig_size = int(self.PATCH_SIZE / scale)
 
                         # Estimate tumor size in mm
-                        # Use activation intensity as rough size proxy
                         estimated_pixels = orig_size * tumor_prob * 0.3
                         estimated_mm = estimated_pixels * pixel_spacing
 
-                        detections.append({
+                        detection_info = {
                             "location": {
                                 "x": orig_x,
                                 "y": orig_y,
@@ -121,14 +147,21 @@ class SmallTumorDetector:
                             "tumor_probability": round(tumor_prob, 3),
                             "estimated_size_mm": round(estimated_mm, 1),
                             "scale": scale,
-                            "dominant_class": self._get_class_name(int(np.argmax(pred))),
-                            "class_probabilities": {
+                        }
+
+                        if use_patch_model:
+                            detection_info["dominant_class"] = "Tumor"
+                            detection_info["classifier_type"] = "dedicated_patch_model"
+                        else:
+                            detection_info["dominant_class"] = self._get_class_name(int(np.argmax(pred)))
+                            detection_info["class_probabilities"] = {
                                 "Glioma": round(float(pred[0]), 3),
                                 "Meningioma": round(float(pred[1]), 3),
                                 "No Tumor": round(float(pred[2]), 3),
                                 "Pituitary": round(float(pred[3]), 3),
-                            },
-                        })
+                            }
+
+                        detections.append(detection_info)
 
             results["total_patches_analyzed"] += patch_count
 

@@ -197,7 +197,7 @@ def train_model(model, effenet):
     needs_rebuild = False
     if combined_dir.exists():
         # Check if new sources are already integrated
-        marker = combined_dir / ".sources_v2"
+        marker = combined_dir / ".sources_v3"
         if not marker.exists():
             needs_rebuild = True
             shutil.rmtree(str(combined_dir))
@@ -253,59 +253,68 @@ def train_model(model, effenet):
                 for f in cls_folder.glob("*.jpg"):
                     shutil.copy2(str(f), str(dst / f"brisc_{f.name}"))
         
-        # ── Add BraTS 2021 2D FLAIR slices (for FLAIR/LGG generalization) ────
+        # ── Add BraTS 2021 2D ALL SEQUENCES (T1, T1CE, T2, FLAIR) ────────
         brats_dir = DATASETS_DIR / "brats2021-2d"
-        brats_flair = brats_dir / "flair"
         brats_csv = brats_dir / "target.csv"
-        if brats_flair.exists() and brats_csv.exists():
-            print("  Adding BraTS 2021 2D FLAIR slices to training...")
+        brats_sequences = ["flair", "t1", "t1ce", "t2"]
+        if brats_csv.exists() and all((brats_dir / s).exists() for s in brats_sequences):
+            print("  Adding BraTS 2021 2D ALL sequences (T1, T1CE, T2, FLAIR)...")
             import csv
             # Read labels
-            tumor_files = []
-            no_tumor_files = []
+            tumor_rows = []
+            no_tumor_rows = []
             with open(str(brats_csv), 'r') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
-                    fname = f"flair_BraTS2021_{row['BraTS21ID']}_{row['image_id']}.png"
-                    fpath = brats_flair / fname
-                    if fpath.exists():
-                        if row['tumor_slice'] == '1':
-                            tumor_files.append(fpath)
-                        else:
-                            no_tumor_files.append(fpath)
+                    if row['tumor_slice'] == '1':
+                        tumor_rows.append(row)
+                    else:
+                        no_tumor_rows.append(row)
             
-            # Sample: 1500 tumor → glioma_tumor, 1500 no-tumor → no_tumor
             rng = random.Random(SEED)
-            rng.shuffle(tumor_files)
-            rng.shuffle(no_tumor_files)
-            n_tumor = min(1500, len(tumor_files))
-            n_notumor = min(1500, len(no_tumor_files))
+            rng.shuffle(tumor_rows)
+            rng.shuffle(no_tumor_rows)
+            # 500 tumor + 500 no-tumor PER sequence = 2000 tumor + 2000 no-tumor total
+            n_tumor_per_seq = 500
+            n_notumor_per_seq = 500
             
             dst_tumor = combined_dir / "glioma_tumor"
             dst_notumor = combined_dir / "no_tumor"
             dst_tumor.mkdir(parents=True, exist_ok=True)
             dst_notumor.mkdir(parents=True, exist_ok=True)
             
-            saved_flair = 0
-            for fpath in tumor_files[:n_tumor]:
-                img = cv2.imread(str(fpath))
-                if img is None:
-                    continue
-                img = cv2.resize(img, IMG_SIZE)
-                cv2.imwrite(str(dst_tumor / f"brats_tumor_{saved_flair}.jpg"), img)
-                saved_flair += 1
-            
-            saved_notumor = 0
-            for fpath in no_tumor_files[:n_notumor]:
-                img = cv2.imread(str(fpath))
-                if img is None:
-                    continue
-                img = cv2.resize(img, IMG_SIZE)
-                cv2.imwrite(str(dst_notumor / f"brats_notumor_{saved_notumor}.jpg"), img)
-                saved_notumor += 1
-            
-            print(f"    Added {saved_flair} FLAIR tumor slices → glioma_tumor")
-            print(f"    Added {saved_notumor} FLAIR no-tumor slices → no_tumor")
+            for seq in brats_sequences:
+                seq_dir = brats_dir / seq
+                saved_tumor = 0
+                saved_notumor = 0
+                
+                for row in tumor_rows:
+                    if saved_tumor >= n_tumor_per_seq:
+                        break
+                    fname = f"{seq}_BraTS2021_{row['BraTS21ID']}_{row['image_id']}.png"
+                    fpath = seq_dir / fname
+                    if fpath.exists():
+                        img = cv2.imread(str(fpath))
+                        if img is None:
+                            continue
+                        img = cv2.resize(img, IMG_SIZE)
+                        cv2.imwrite(str(dst_tumor / f"brats_{seq}_tumor_{saved_tumor}.jpg"), img)
+                        saved_tumor += 1
+                
+                for row in no_tumor_rows:
+                    if saved_notumor >= n_notumor_per_seq:
+                        break
+                    fname = f"{seq}_BraTS2021_{row['BraTS21ID']}_{row['image_id']}.png"
+                    fpath = seq_dir / fname
+                    if fpath.exists():
+                        img = cv2.imread(str(fpath))
+                        if img is None:
+                            continue
+                        img = cv2.resize(img, IMG_SIZE)
+                        cv2.imwrite(str(dst_notumor / f"brats_{seq}_notumor_{saved_notumor}.jpg"), img)
+                        saved_notumor += 1
+                
+                print(f"    {seq.upper()}: {saved_tumor} tumor + {saved_notumor} no-tumor")
         
         # ── Add Figshare patches (for patch-style generalization) ─────────────
         fig_img_dir = DATASETS_DIR / "figshare-brain-tumor" / "Brain Tumor" / "Brain Tumor"
@@ -382,8 +391,9 @@ def train_model(model, effenet):
             print(f"    Added {lgg_tumor} LGG tumor slices → glioma_tumor")
             print(f"    Added {lgg_notumor} LGG no-tumor slices → no_tumor")
         
-        # Mark as v2 (with all sources)
-        (combined_dir / ".sources_v2").touch()
+        # Mark as v3 (with all sequences + sources)
+        (combined_dir / ".sources_v3").touch()
+        (combined_dir / ".sources_v2").touch()  # backward compat
         
         # Print combined stats
         for cls in sorted(os.listdir(str(combined_dir))):
@@ -533,6 +543,404 @@ def train_model(model, effenet):
     print("\nModel saved → model_best.keras")
     
     return model, train_data.class_indices
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FIX 3: WHO Grade Classifier (HGG vs LGG from DICOM-multi + LGG-seg)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def train_grade_classifier():
+    """
+    Train a binary grade classifier: High-Grade (III-IV) vs Low-Grade (I-II).
+    Data sources:
+    - brain-mri-multi: DICOM FLAIR with diagnosis+grade labels (105 patients)
+    - lgg-segmentation: All LGG (111 patients) → label = low-grade
+    """
+    import csv
+    grade_model_path = Path('grade_classifier.keras')
+    if grade_model_path.exists():
+        print("\n  Grade classifier already trained → grade_classifier.keras")
+        return tf.keras.models.load_model(str(grade_model_path))
+    
+    print("\n" + "=" * 70)
+    print("TRAINING WHO GRADE CLASSIFIER (High-Grade vs Low-Grade)")
+    print("=" * 70)
+    
+    grade_dir = PREPROCESSED_DIR / "grade_training"
+    hgg_dir = grade_dir / "high_grade"
+    lgg_dir_out = grade_dir / "low_grade"
+    hgg_dir.mkdir(parents=True, exist_ok=True)
+    lgg_dir_out.mkdir(parents=True, exist_ok=True)
+    
+    # Skip if already built
+    if not (grade_dir / ".built").exists():
+        # Source 1: brain-mri-multi DICOM with grade labels
+        dicom_csv = DATASETS_DIR / "brain-mri-multi" / "data.csv"
+        dicom_base = DATASETS_DIR / "brain-mri-multi" / "dicom-flair" / "dicom-flair"
+        
+        hgg_count = 0
+        lgg_count = 0
+        
+        if dicom_csv.exists():
+            print("  Loading DICOM-multi with grade labels...")
+            try:
+                import pydicom
+                has_pydicom = True
+            except ImportError:
+                has_pydicom = False
+            
+            with open(str(dicom_csv), 'r') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    folder_id = row['FolderID']
+                    diagnosis = row['Diagnosis']
+                    
+                    # Extract grade from diagnosis (e.g., "ASTROCYTOMA-3" → grade 3)
+                    grade_num = 0
+                    parts = diagnosis.rsplit('-', 1)
+                    if len(parts) == 2 and parts[1].isdigit():
+                        grade_num = int(parts[1])
+                    
+                    is_hgg = grade_num >= 3  # Grade III-IV = high-grade
+                    target_dir = hgg_dir if is_hgg else lgg_dir_out
+                    
+                    # Load DICOM slices from this patient
+                    patient_dir = dicom_base / folder_id
+                    if not patient_dir.exists():
+                        continue
+                    
+                    dcm_files = list(patient_dir.glob("*.dcm"))
+                    for dcm_path in dcm_files[:5]:  # max 5 slices per patient
+                        if has_pydicom:
+                            try:
+                                ds = pydicom.dcmread(str(dcm_path))
+                                arr = ds.pixel_array.astype(np.float32)
+                                arr = ((arr - arr.min()) / (arr.max() - arr.min() + 1e-7) * 255).astype(np.uint8)
+                                if len(arr.shape) == 2:
+                                    arr = cv2.cvtColor(arr, cv2.COLOR_GRAY2BGR)
+                                arr = cv2.resize(arr, IMG_SIZE)
+                            except Exception:
+                                continue
+                        else:
+                            # Fallback: try reading as image
+                            arr = cv2.imread(str(dcm_path))
+                            if arr is None:
+                                continue
+                            arr = cv2.resize(arr, IMG_SIZE)
+                        
+                        prefix = "hgg" if is_hgg else "lgg"
+                        idx = hgg_count if is_hgg else lgg_count
+                        cv2.imwrite(str(target_dir / f"dicom_{prefix}_{idx}.jpg"), arr)
+                        if is_hgg:
+                            hgg_count += 1
+                        else:
+                            lgg_count += 1
+            
+            print(f"    DICOM-multi: {hgg_count} HGG + {lgg_count} LGG slices")
+        
+        # Source 2: LGG segmentation (all low-grade) — tumor slices only
+        lgg_seg_dir = DATASETS_DIR / "lgg-segmentation" / "kaggle_3m"
+        if lgg_seg_dir.exists():
+            print("  Loading LGG segmentation (all low-grade)...")
+            patient_dirs = sorted([d for d in lgg_seg_dir.iterdir()
+                                   if d.is_dir() and d.name.startswith('TCGA')])
+            lgg_from_seg = 0
+            for patient_dir in patient_dirs:
+                images = sorted(patient_dir.glob("*.tif"))
+                masks = {str(p) for p in images if '_mask' in p.name}
+                scans = [p for p in images if str(p) not in masks]
+                
+                for scan_path in scans[:3]:  # 3 slices per patient
+                    mask_path = scan_path.with_name(scan_path.stem + '_mask.tif')
+                    if mask_path.exists():
+                        mask = cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE)
+                        if mask is not None and mask.sum() > 0:  # only tumor slices
+                            img = cv2.imread(str(scan_path))
+                            if img is None:
+                                continue
+                            img = cv2.resize(img, IMG_SIZE)
+                            cv2.imwrite(str(lgg_dir_out / f"lggseg_{lgg_from_seg}.jpg"), img)
+                            lgg_from_seg += 1
+                            lgg_count += 1
+            print(f"    LGG-seg: {lgg_from_seg} low-grade tumor slices")
+        
+        # Source 3: BraTS 2021 — all are HGG (Grade III-IV gliomas)
+        brats_dir = DATASETS_DIR / "brats2021-2d"
+        brats_csv_path = brats_dir / "target.csv"
+        if brats_csv_path.exists():
+            print("  Loading BraTS 2021 tumor slices (all HGG)...")
+            tumor_rows = []
+            with open(str(brats_csv_path), 'r') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if row['tumor_slice'] == '1':
+                        tumor_rows.append(row)
+            
+            rng = random.Random(SEED)
+            rng.shuffle(tumor_rows)
+            brats_hgg = 0
+            # Balance: add enough BraTS HGG to roughly match LGG count
+            target_hgg = max(lgg_count - hgg_count, 300)
+            for row in tumor_rows[:target_hgg]:
+                fname = f"flair_BraTS2021_{row['BraTS21ID']}_{row['image_id']}.png"
+                fpath = brats_dir / "flair" / fname
+                if fpath.exists():
+                    img = cv2.imread(str(fpath))
+                    if img is None:
+                        continue
+                    img = cv2.resize(img, IMG_SIZE)
+                    cv2.imwrite(str(hgg_dir / f"brats_hgg_{brats_hgg}.jpg"), img)
+                    brats_hgg += 1
+                    hgg_count += 1
+            print(f"    BraTS HGG: {brats_hgg} high-grade tumor slices")
+        
+        print(f"\n  Grade training set: {hgg_count} HGG + {lgg_count} LGG")
+        (grade_dir / ".built").touch()
+    else:
+        hgg_count = len(list(hgg_dir.glob("*.jpg")))
+        lgg_count = len(list(lgg_dir_out.glob("*.jpg")))
+        print(f"  Grade training data exists: {hgg_count} HGG + {lgg_count} LGG")
+    
+    # Build lightweight grade model (MobileNetV2 for speed)
+    from tensorflow.keras.applications import MobileNetV2
+    base = MobileNetV2(weights='imagenet', include_top=False, input_shape=(240, 240, 3))
+    for layer in base.layers:
+        layer.trainable = False
+    
+    x = base.output
+    x = GlobalAveragePooling2D()(x)
+    x = Dense(128, activation='relu')(x)
+    x = Dropout(0.3)(x)
+    outputs = Dense(1, activation='sigmoid')(x)  # binary: 0=LGG, 1=HGG
+    
+    grade_model = Model(inputs=base.input, outputs=outputs)
+    
+    datagen = ImageDataGenerator(
+        rotation_range=15, zoom_range=0.15,
+        horizontal_flip=True, brightness_range=[0.85, 1.15],
+        validation_split=0.15
+    )
+    
+    train_data = datagen.flow_from_directory(
+        str(grade_dir), target_size=IMG_SIZE, batch_size=32,
+        class_mode='binary', subset='training', seed=SEED
+    )
+    valid_data = datagen.flow_from_directory(
+        str(grade_dir), target_size=IMG_SIZE, batch_size=32,
+        class_mode='binary', subset='validation', seed=SEED
+    )
+    
+    # Class weights for grade balance
+    class_weights_arr = compute_class_weight(
+        class_weight='balanced', classes=np.array([0, 1]), y=train_data.classes
+    )
+    grade_weights = dict(enumerate(class_weights_arr))
+    
+    print(f"  Class mapping: {train_data.class_indices}")
+    print(f"  Training: {train_data.samples}, Validation: {valid_data.samples}")
+    
+    # Phase 1: frozen
+    grade_model.compile(optimizer=Adam(1e-4), loss='binary_crossentropy', metrics=['accuracy'])
+    grade_model.fit(
+        train_data, epochs=15, validation_data=valid_data,
+        class_weight=grade_weights, verbose=1,
+        callbacks=[
+            EarlyStopping(monitor='val_accuracy', patience=5, restore_best_weights=True),
+            ReduceLROnPlateau(monitor='val_accuracy', factor=0.5, patience=2, min_lr=1e-6)
+        ]
+    )
+    
+    # Phase 2: fine-tune top layers
+    for layer in base.layers[-40:]:
+        if not isinstance(layer, BatchNormalization):
+            layer.trainable = True
+    
+    grade_model.compile(optimizer=Adam(5e-6), loss='binary_crossentropy', metrics=['accuracy'])
+    grade_model.fit(
+        train_data, epochs=20, validation_data=valid_data,
+        class_weight=grade_weights, verbose=1,
+        callbacks=[
+            EarlyStopping(monitor='val_accuracy', patience=8, restore_best_weights=True),
+            ReduceLROnPlateau(monitor='val_accuracy', factor=0.5, patience=3, min_lr=1e-7)
+        ]
+    )
+    
+    grade_model.save(str(grade_model_path))
+    print(f"\n  Grade classifier saved → {grade_model_path}")
+    return grade_model
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FIX 2: Small Tumor Patch Classifier
+# ══════════════════════════════════════════════════════════════════════════════
+
+def train_patch_classifier():
+    """
+    Train a binary patch classifier for small tumor detection.
+    Extracts small patches (60x60, 120x120) from training images,
+    trains a lightweight model to detect tumor vs no-tumor at patch level.
+    """
+    patch_model_path = Path('patch_classifier.keras')
+    if patch_model_path.exists():
+        print("\n  Patch classifier already trained → patch_classifier.keras")
+        return tf.keras.models.load_model(str(patch_model_path))
+    
+    print("\n" + "=" * 70)
+    print("TRAINING SMALL TUMOR PATCH CLASSIFIER")
+    print("=" * 70)
+    
+    patch_dir = PREPROCESSED_DIR / "patch_training"
+    tumor_patch_dir = patch_dir / "tumor"
+    clean_patch_dir = patch_dir / "clean"
+    tumor_patch_dir.mkdir(parents=True, exist_ok=True)
+    clean_patch_dir.mkdir(parents=True, exist_ok=True)
+    
+    if not (patch_dir / ".built").exists():
+        combined_dir = PREPROCESSED_DIR / "Training_combined"
+        tumor_classes = ["glioma_tumor", "meningioma_tumor", "pituitary_tumor"]
+        no_tumor_class = "no_tumor"
+        
+        patch_sizes = [60, 90, 120]  # multi-scale patches
+        
+        tumor_count = 0
+        clean_count = 0
+        
+        # Extract tumor patches from tumor class images
+        print("  Extracting tumor patches from training images...")
+        for cls in tumor_classes:
+            cls_dir = combined_dir / cls
+            if not cls_dir.exists():
+                continue
+            images = [p for p in cls_dir.glob("*.jpg") if not p.name.startswith("aug_")]
+            rng = random.Random(SEED)
+            rng.shuffle(images)
+            
+            for img_path in images[:200]:  # 200 images per tumor class
+                img = cv2.imread(str(img_path))
+                if img is None:
+                    continue
+                h, w = img.shape[:2]
+                
+                for ps in patch_sizes:
+                    if h < ps or w < ps:
+                        continue
+                    # Extract 3 random patches per image per scale
+                    for _ in range(3):
+                        y = random.randint(0, h - ps)
+                        x = random.randint(0, w - ps)
+                        patch = img[y:y+ps, x:x+ps]
+                        # Skip mostly-black patches
+                        if cv2.cvtColor(patch, cv2.COLOR_BGR2GRAY).mean() < 20:
+                            continue
+                        patch_resized = cv2.resize(patch, (120, 120))
+                        cv2.imwrite(str(tumor_patch_dir / f"tp_{tumor_count}.jpg"), patch_resized)
+                        tumor_count += 1
+        
+        # Extract clean patches from no-tumor images
+        print("  Extracting clean patches from no-tumor images...")
+        no_tumor_dir = combined_dir / no_tumor_class
+        if no_tumor_dir.exists():
+            images = [p for p in no_tumor_dir.glob("*.jpg") if not p.name.startswith("aug_")]
+            rng = random.Random(SEED)
+            rng.shuffle(images)
+            
+            target_clean = tumor_count  # balance
+            for img_path in images:
+                if clean_count >= target_clean:
+                    break
+                img = cv2.imread(str(img_path))
+                if img is None:
+                    continue
+                h, w = img.shape[:2]
+                
+                for ps in patch_sizes:
+                    if h < ps or w < ps:
+                        continue
+                    for _ in range(3):
+                        y = random.randint(0, h - ps)
+                        x = random.randint(0, w - ps)
+                        patch = img[y:y+ps, x:x+ps]
+                        if cv2.cvtColor(patch, cv2.COLOR_BGR2GRAY).mean() < 20:
+                            continue
+                        patch_resized = cv2.resize(patch, (120, 120))
+                        cv2.imwrite(str(clean_patch_dir / f"cp_{clean_count}.jpg"), patch_resized)
+                        clean_count += 1
+                        if clean_count >= target_clean:
+                            break
+                    if clean_count >= target_clean:
+                        break
+        
+        print(f"  Patch dataset: {tumor_count} tumor + {clean_count} clean patches")
+        (patch_dir / ".built").touch()
+    else:
+        tumor_count = len(list(tumor_patch_dir.glob("*.jpg")))
+        clean_count = len(list(clean_patch_dir.glob("*.jpg")))
+        print(f"  Patch data exists: {tumor_count} tumor + {clean_count} clean")
+    
+    # Build small patch model (MobileNetV2 with 120x120 input)
+    from tensorflow.keras.applications import MobileNetV2
+    base = MobileNetV2(weights='imagenet', include_top=False, input_shape=(120, 120, 3))
+    for layer in base.layers:
+        layer.trainable = False
+    
+    x = base.output
+    x = GlobalAveragePooling2D()(x)
+    x = Dense(64, activation='relu')(x)
+    x = Dropout(0.3)(x)
+    outputs = Dense(1, activation='sigmoid')(x)  # binary: tumor vs clean
+    
+    patch_model = Model(inputs=base.input, outputs=outputs)
+    
+    datagen = ImageDataGenerator(
+        rotation_range=20, zoom_range=0.2,
+        horizontal_flip=True, vertical_flip=True,
+        brightness_range=[0.8, 1.2],
+        validation_split=0.15
+    )
+    
+    train_data = datagen.flow_from_directory(
+        str(patch_dir), target_size=(120, 120), batch_size=32,
+        class_mode='binary', subset='training', seed=SEED
+    )
+    valid_data = datagen.flow_from_directory(
+        str(patch_dir), target_size=(120, 120), batch_size=32,
+        class_mode='binary', subset='validation', seed=SEED
+    )
+    
+    class_weights_arr = compute_class_weight(
+        class_weight='balanced', classes=np.array([0, 1]), y=train_data.classes
+    )
+    patch_weights = dict(enumerate(class_weights_arr))
+    
+    print(f"  Class mapping: {train_data.class_indices}")
+    
+    # Phase 1: frozen
+    patch_model.compile(optimizer=Adam(1e-4), loss='binary_crossentropy', metrics=['accuracy'])
+    patch_model.fit(
+        train_data, epochs=15, validation_data=valid_data,
+        class_weight=patch_weights, verbose=1,
+        callbacks=[
+            EarlyStopping(monitor='val_accuracy', patience=5, restore_best_weights=True),
+        ]
+    )
+    
+    # Phase 2: fine-tune
+    for layer in base.layers[-30:]:
+        if not isinstance(layer, BatchNormalization):
+            layer.trainable = True
+    
+    patch_model.compile(optimizer=Adam(5e-6), loss='binary_crossentropy', metrics=['accuracy'])
+    patch_model.fit(
+        train_data, epochs=15, validation_data=valid_data,
+        class_weight=patch_weights, verbose=1,
+        callbacks=[
+            EarlyStopping(monitor='val_accuracy', patience=8, restore_best_weights=True),
+        ]
+    )
+    
+    patch_model.save(str(patch_model_path))
+    print(f"\n  Patch classifier saved → {patch_model_path}")
+    return patch_model
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1031,8 +1439,8 @@ def main():
 
     # ── Step 0: Model ────────────────────────────────────────────────────────
     model_path = Path('model_best.keras')
-    # Check if combined dir has v2 marker (all sources included)
-    v2_marker = PREPROCESSED_DIR / "Training_combined" / ".sources_v2"
+    # Check if combined dir has v3 marker (all sequences + sources)
+    v2_marker = PREPROCESSED_DIR / "Training_combined" / ".sources_v3"
     model_needs_retrain = not v2_marker.exists()
     
     if model_path.exists() and not model_needs_retrain and not args.fresh:
@@ -1048,6 +1456,10 @@ def main():
         model, class_indices = train_model(model, effenet)
         ckpt["model_trained"] = True
         save_checkpoint(ckpt)
+
+    # ── Step 0b: Train specialized models (grade + patch classifiers) ────────
+    grade_model = train_grade_classifier()
+    patch_model = train_patch_classifier()
 
     # ── Define all test steps ────────────────────────────────────────────────
     all_steps = [

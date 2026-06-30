@@ -69,12 +69,17 @@
   line-height: 1.7;
 }
 
-/* Limitations */
+/* Limitations — Addressed */
 .limitations-box {
   padding: 28px 32px;
   background: var(--bg-light);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+}
+
+.limitations-box.resolved {
+  border-color: var(--success);
+  background: color-mix(in srgb, var(--success) 4%, var(--bg-light));
 }
 
 .limitations-box h3 {
@@ -92,10 +97,38 @@
 .limitations-box li {
   position: relative;
   padding-left: 24px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
   font-size: 0.88rem;
   color: var(--text-secondary);
   line-height: 1.7;
+}
+
+.limitations-box li strong {
+  color: var(--text-primary);
+}
+
+.limitations-box.resolved li::before {
+  content: '✓';
+  position: absolute;
+  left: 4px;
+  color: var(--success);
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.fixed-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--success) 25%, transparent);
+  border-radius: 20px;
+  white-space: nowrap;
+  vertical-align: middle;
 }
 
 .limitations-box li::before {
