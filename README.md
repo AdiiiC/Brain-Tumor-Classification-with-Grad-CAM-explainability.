@@ -1,8 +1,10 @@
 # Brain Tumor Classification with Grad-CAM++ Explainability
 
-An end-to-end brain tumor classification system using EfficientNetB1 with Grad-CAM++ visual explainability, Monte Carlo Dropout uncertainty estimation, and a doctor-friendly React clinical interface backed by a FastAPI REST API.
+An end-to-end brain tumor classification system using EfficientNetB1 with Grad-CAM++ visual explainability, Monte Carlo Dropout uncertainty estimation, and a clinical React interface backed by a FastAPI REST API with 5 specialized clinical modules.
 
 Classifies brain MRI scans into 4 categories: **Glioma**, **Meningioma**, **Pituitary Tumor**, and **No Tumor**.
+
+**Live Demo:** [Frontend (Vercel)](https://brain-tumor-classification-with-grad-cam-explainability.vercel.app) | [API (Render)](https://brain-tumor-classification-2l6r.onrender.com/health)
 
 ---
 
@@ -10,40 +12,56 @@ Classifies brain MRI scans into 4 categories: **Glioma**, **Meningioma**, **Pitu
 
 - **EfficientNetB1 with Transfer Learning** — 2-phase training (frozen base → fine-tuning top 30 layers)
 - **Grad-CAM++ Explainability** — visual heatmaps showing which brain regions influenced the prediction
-- **Monte Carlo Dropout** — uncertainty quantification (30 stochastic forward passes) with auto-flagging for specialist review
-- **Test-Time Augmentation (TTA)** — boosts accuracy by averaging predictions over augmented views
-- **Calibrated Confidence** — temperature scaling so reported confidence matches actual accuracy
+- **Monte Carlo Dropout** — uncertainty quantification (50 stochastic forward passes) with auto-flagging for specialist review
+- **Test-Time Augmentation (TTA)** — weighted TTA boosts accuracy by averaging predictions over augmented views
+- **Calibrated Confidence** — temperature scaling (T=1.5) so reported confidence matches actual accuracy
 - **DICOM Support** — accepts clinical DICOM files directly from imaging equipment
-- **Doctor-Friendly React Website** — clean clinical UI with dark mode, upload-and-analyze workflow, visual explanations
-- **FastAPI Backend** — REST endpoints for prediction, batch inference, Grad-CAM, SHAP, and full analysis
-- **Multi-Dataset Test Suite** — checkpoint/resume system that tests across 5 datasets
+- **Multi-Sequence MRI Training** — trained on T1, T1CE, T2, and FLAIR sequences from BraTS 2021
+- **Class-Balanced Training** — offline augmentation oversampling to equalize all 4 classes
+- **5 Clinical Modules:**
+  - **Image Quality Assessment** — resolution, blur, SNR, compression, brain coverage scoring
+  - **MRI Sequence Detection** — auto-detects T1/T1CE/T2/FLAIR/DWI from image statistics or DICOM metadata
+  - **WHO Tumor Grading** — Grade I-IV estimation using a dedicated MobileNetV2 grade classifier + image features
+  - **Small Tumor Detection** — sliding-window patch-based detection using a trained MobileNetV2 patch classifier
+  - **Pediatric Support** — Bayesian re-weighting of predictions based on age-specific tumor priors
+- **Grade Classifier** — MobileNetV2 (240×240) trained on HGG/LGG data for binary glioma grading
+- **Patch Classifier** — MobileNetV2 (120×120) trained on tumor/clean patches for small tumor detection
+- **Doctor-Friendly React Website** — clinical UI with dark mode, upload-and-analyze, visual explanations, live results page
+- **FastAPI Backend** — 16 REST endpoints for prediction, explainability, quality assessment, and comprehensive analysis
+- **Multi-Dataset Test Suite** — checkpoint/resume system that tests across 5 datasets (21,732 images)
 - **19 Upgrade Modules** — ViT, 3D CNN, U-Net segmentation, federated learning, knowledge distillation, GAN augmentation, and more
-- **Docker Deployment** — single-command deployment with docker-compose
+- **Docker + Cloud Deployment** — Docker, Vercel (frontend), Render (backend)
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    React Frontend (:5173)                     │
-│  Upload MRI → View Results + Grad-CAM → Dark/Light Mode     │
-└──────────────────────┬──────────────────────────────────────┘
-                       │ POST /analyze
-┌──────────────────────▼──────────────────────────────────────┐
-│                   FastAPI Backend (:8000)                     │
-│  /predict  /predict/batch  /explain/gradcam  /explain/shap   │
-│  /analyze (full pipeline)  /health                           │
-├──────────────────────────────────────────────────────────────┤
-│  ModelService: EfficientNetB1 + Grad-CAM++ + MC Dropout      │
-│  DICOM Handler │ Temperature Calibration │ SHAP Explainer    │
-└──────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                    React Frontend (Vercel)                        │
+│  Upload MRI → Results + Grad-CAM → Live Demo → Dark/Light Mode  │
+└──────────────────────┬───────────────────────────────────────────┘
+                       │ POST /analyze, /assess/*, /detect/*
+┌──────────────────────▼───────────────────────────────────────────┐
+│                   FastAPI Backend (Render)                        │
+│  /predict  /predict/batch  /explain/gradcam  /explain/shap       │
+│  /analyze  /analyze/comprehensive  /health                       │
+│  /assess/quality  /assess/sequence  /assess/grade                │
+│  /assess/pediatric  /detect/small-tumors                         │
+├──────────────────────────────────────────────────────────────────┤
+│  ModelService     │ ImageQuality  │ SequenceDetector             │
+│  (EfficientNetB1) │ (blur/SNR/    │ (T1/T1CE/T2/                │
+│                   │  resolution)  │  FLAIR/DWI)                  │
+│  TumorGrading     │ SmallTumor    │ PediatricSupport             │
+│  (MobileNetV2     │ (MobileNetV2  │ (Bayesian                   │
+│   grade model)    │  patch model) │  re-weighting)               │
+└──────────────────────────────────────────────────────────────────┘
                        │
-         ┌─────────────▼─────────────┐
-         │  model_best.keras (26 MB) │
-         │  EfficientNetB1, 4 classes│
-         │  240×240 input, softmax   │
-         └───────────────────────────┘
+         ┌─────────────▼──────────────────────┐
+         │  model_best.keras (26 MB)          │
+         │  grade_classifier.keras (MobileV2) │
+         │  patch_classifier.keras (MobileV2) │
+         └────────────────────────────────────┘
 ```
 
 ---
@@ -52,13 +70,29 @@ Classifies brain MRI scans into 4 categories: **Glioma**, **Meningioma**, **Pitu
 
 | Layer | Technologies |
 |-------|-------------|
-| Model | TensorFlow/Keras, EfficientNetB1, mixed_float16 precision |
+| Model | TensorFlow/Keras, EfficientNetB1 (main), MobileNetV2 (grade + patch), mixed_float16 |
 | Explainability | Grad-CAM++, SHAP DeepExplainer, Attention Rollout |
 | Backend | FastAPI, Uvicorn, Pydantic, pydicom |
 | Frontend | React 18, Vite, CSS custom properties (light/dark theme) |
-| Testing | scikit-learn metrics, multi-dataset checkpoint/resume |
-| Deployment | Docker, docker-compose |
-| Data | OpenCV, CLAHE preprocessing, ImageDataGenerator augmentation |
+| Testing | scikit-learn metrics, multi-dataset checkpoint/resume (5 datasets, 21,732 images) |
+| Deployment | Docker, Vercel (frontend), Render (backend) |
+| Data | OpenCV, CLAHE preprocessing, offline augmentation oversampling |
+
+---
+
+## Test Results
+
+Tested across 5 independent datasets (21,732 total images):
+
+| Dataset | Images | Task | Accuracy |
+|---------|--------|------|----------|
+| Standard MRI Scans | 1,311 | 4-class tumor type | 84.26% |
+| Hospital MRI Collection | 2,870 | 4-class tumor type | 85.50% |
+| Clinical Detection Set | 253 | Tumor vs. healthy | 83.40% |
+| Confirmed Tumor Scans | 3,064 | Tumor type identification | 100.00% |
+| FLAIR Sequence MRIs | 3,929 | Tumor vs. healthy (FLAIR) | 77.50% |
+
+Training data: 21,732 images balanced across 4 classes using offline augmentation oversampling, including T1, T1CE, T2, and FLAIR MRI sequences from BraTS 2021.
 
 ---
 
@@ -68,8 +102,12 @@ Classifies brain MRI scans into 4 categories: **Glioma**, **Meningioma**, **Pitu
 .
 ├── Brain_Tumor_Classification_Using_DL_&_GradCAM.ipynb  # Original notebook
 ├── test_all_datasets.py          # Multi-dataset test suite with checkpoint/resume
+├── model_best.keras              # Main EfficientNetB1 model (4-class)
+├── grade_classifier.keras        # MobileNetV2 grade classifier (HGG/LGG)
+├── patch_classifier.keras        # MobileNetV2 patch classifier (tumor/clean)
 ├── Dockerfile                    # API container
-├── docker-compose.yml            # Full stack (API + frontend + federated)
+├── docker-compose.yml            # Full stack deployment
+├── render.yaml                   # Render backend config
 ├── requirements-api.txt          # API Python dependencies
 ├── SETUP.md                      # Detailed step-by-step run guide
 │
@@ -89,13 +127,18 @@ Classifies brain MRI scans into 4 categories: **Glioma**, **Meningioma**, **Pitu
 │   ├── export.py                 #   TFLite INT8 export
 │   └── run_pipeline.py           #   End-to-end orchestrator
 │
-├── api/                          # FastAPI backend
-│   ├── main.py                   #   REST endpoints
+├── api/                          # FastAPI backend (16 endpoints)
+│   ├── main.py                   #   REST endpoints + clinical modules
 │   ├── model_service.py          #   Inference, Grad-CAM++, MC Dropout, TTA
 │   ├── schemas.py                #   Pydantic response models
 │   ├── dicom_handler.py          #   DICOM file parsing
-│   ├── calibration.py            #   Temperature scaling
-│   └── shap_explainer.py         #   SHAP integration
+│   ├── calibration.py            #   Temperature scaling (T=1.5)
+│   ├── shap_explainer.py         #   SHAP integration
+│   ├── image_quality.py          #   Image quality assessment module
+│   ├── sequence_detector.py      #   MRI sequence auto-detection
+│   ├── tumor_grading.py          #   WHO Grade I-IV estimation
+│   ├── small_tumor_detector.py   #   Patch-based small tumor detection
+│   └── pediatric_support.py      #   Bayesian pediatric re-weighting
 │
 ├── upgrades/                     # Advanced upgrade modules
 │   ├── vit_model.py              #   Vision Transformer
@@ -112,7 +155,10 @@ Classifies brain MRI scans into 4 categories: **Glioma**, **Meningioma**, **Pitu
 │   ├── segmentation.py           #   U-Net tumor segmentation
 │   └── longitudinal.py           #   Patient timeline tracking
 │
-├── website/                      # React frontend (Vite)
+├── website/                      # React frontend (Vite → Vercel)
+│   ├── vercel.json               #   Vercel deployment config
+│   ├── .env.production           #   Production API URL
+│   ├── public/samples.json       #   Base64 sample images for live demo
 │   ├── src/
 │   │   ├── App.jsx / App.css
 │   │   ├── index.css             #   Light/dark theme variables
@@ -122,7 +168,8 @@ Classifies brain MRI scans into 4 categories: **Glioma**, **Meningioma**, **Pitu
 │   │       ├── UploadAnalyze.jsx #   MRI upload → results display
 │   │       ├── HowItWorks.jsx    #   4-step process guide
 │   │       ├── Interpret.jsx     #   Guide to reading results
-│   │       ├── Trust.jsx         #   Safety, accuracy, limitations
+│   │       ├── Results.jsx       #   Test results + live API demo
+│   │       ├── Trust.jsx         #   Safety, accuracy, resolved limitations
 │   │       └── Footer.jsx        #   Medical disclaimer
 │   └── package.json
 │
@@ -131,7 +178,8 @@ Classifies brain MRI scans into 4 categories: **Glioma**, **Meningioma**, **Pitu
     ├── brain-tumor-bilal/
     ├── brain-mri-detection-navoneel/
     ├── figshare-brain-tumor/
-    └── lgg-segmentation/
+    ├── lgg-segmentation/
+    └── brats2021-2d/ (T1, T1CE, T2, FLAIR sequences)
 ```
 
 ---
@@ -140,44 +188,37 @@ Classifies brain MRI scans into 4 categories: **Glioma**, **Meningioma**, **Pitu
 
 ```bash
 # 1. Clone & setup
-git clone <repo-url>
+git clone https://github.com/AdiiiC/Brain-Tumor-Classification-with-Grad-CAM-explainability..git
 cd Brain-Tumor-Classification-with-Grad-CAM-explainability.
 python -m venv .venv && source .venv/bin/activate
-pip install tensorflow opencv-python scikit-learn imutils seaborn tqdm Pillow
 pip install -r requirements-api.txt
 
-# 2. Train the model
-cd src && python run_pipeline.py
+# 2. Start the API
+python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
 
-# 3. Start the API
-cd ../api && uvicorn main:app --host 0.0.0.0 --port 8000
-
-# 4. Start the website (new terminal)
+# 3. Start the website (new terminal)
 cd website && npm install && npm run dev
 # Open http://localhost:5173
 ```
 
-See [SETUP.md](SETUP.md) for the complete guide including dataset downloads, Docker deployment, and test suite usage.
+See [SETUP.md](SETUP.md) for the complete guide including dataset downloads, Docker deployment, training, and test suite usage.
 
 ---
 
-## Dataset
+## Datasets
 
-Primary: [Brain Tumor MRI Dataset](https://www.kaggle.com/datasets/masoudnickparvar/brain-tumor-mri-dataset) (Kaggle)
+Trained and tested on 21,732 images from 6 sources:
 
-| Class | Training | Test |
-|-------|----------|------|
-| Glioma | 1,321 | 300 |
-| Meningioma | 1,339 | 306 |
-| No Tumor | 1,595 | 405 |
-| Pituitary | 1,457 | 300 |
+| Source | Images | Type | Purpose |
+|--------|--------|------|---------|
+| Standard MRI collection | 7,023 | 4-class labeled MRI | Primary training + test |
+| Hospital MRI set | 2,870 | 4-class labeled MRI | Cross-dataset test |
+| Clinical detection set | 253 | Binary (tumor/healthy) | Binary detection test |
+| Confirmed tumor scans | 3,064 | Labeled with CSV metadata | Metadata-based test |
+| FLAIR MRI collection | 3,929 | FLAIR with segmentation masks | Sequence-specific test |
+| BraTS 2021 (2D slices) | 2,000 | T1/T1CE/T2/FLAIR (500 each) | Multi-sequence training |
 
-Additional test datasets (see [SETUP.md](SETUP.md) for download commands):
-- **Sartaj** — 4-class, drop-in compatible
-- **Bilal** — 4-class cross-dataset evaluation
-- **Navoneel** — binary tumor detection
-- **Figshare** — binary with CSV metadata
-- **LGG Segmentation** — FLAIR MRI with segmentation masks
+All classes balanced via offline augmentation oversampling before training.
 
 ---
 
@@ -190,7 +231,11 @@ Two-phase transfer learning on EfficientNetB1 (ImageNet weights):
 | 1 | Head only (base frozen) | 1e-4 | 20 | Learn classifier |
 | 2 | Top 30 + head | 1e-5 | 30 | Fine-tune features |
 
-Includes class weighting, CLAHE preprocessing, augmentation (rotation, zoom, shift, flip, brightness), and early stopping with LR reduction.
+Additional models trained after the main model:
+- **Grade Classifier** (MobileNetV2, 240×240) — binary HGG/LGG classification for WHO grading
+- **Patch Classifier** (MobileNetV2, 120×120) — binary tumor/clean classification for small tumor detection
+
+Post-training calibration: temperature scaling (T=1.5) applied to softmax outputs.
 
 ---
 
@@ -198,7 +243,7 @@ Includes class weighting, CLAHE preprocessing, augmentation (rotation, zoom, shi
 
 ```bash
 # Start the API
-cd api && uvicorn main:app --host 0.0.0.0 --port 8000
+python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
 ```
 
 | Method | Endpoint | Description |
@@ -209,6 +254,12 @@ cd api && uvicorn main:app --host 0.0.0.0 --port 8000
 | `POST` | `/explain/gradcam` | Grad-CAM++ heatmap |
 | `POST` | `/explain/shap` | SHAP pixel attribution |
 | `POST` | `/analyze` | Full analysis (prediction + Grad-CAM + recommendation) |
+| `POST` | `/assess/quality` | Image quality score (resolution, blur, SNR, compression) |
+| `POST` | `/assess/sequence` | Auto-detect MRI sequence (T1/T1CE/T2/FLAIR/DWI) |
+| `POST` | `/assess/grade` | WHO tumor grade estimation (Grade I-IV) |
+| `POST` | `/assess/pediatric` | Pediatric assessment with Bayesian re-weighting |
+| `POST` | `/detect/small-tumors` | Small tumor detection via patch-based sliding window |
+| `POST` | `/analyze/comprehensive` | All modules combined in one call |
 
 ---
 
@@ -225,10 +276,17 @@ Checkpoint/resume: results are saved to `test_checkpoint.json` after **each** st
 
 ---
 
-## Docker
+## Deployment
+
+| Component | Platform | Config |
+|-----------|----------|--------|
+| Frontend | Vercel | `website/vercel.json` — auto-detects Vite, serves static build |
+| Backend | Render | `render.yaml` + `Dockerfile` — Docker-based, free tier |
+
+The frontend reads the API URL from `VITE_API_URL` environment variable (set in `website/.env.production` for production builds, falls back to `localhost:8000` for local development).
 
 ```bash
-# Full stack (API on :8000 + frontend on :3000)
+# Docker (local)
 docker-compose up --build
 
 # With federated learning server (:8080)
