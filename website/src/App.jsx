@@ -4,6 +4,7 @@ import UploadAnalyze from './components/UploadAnalyze'
 import HowItWorks from './components/HowItWorks'
 import Interpret from './components/Interpret'
 import Trust from './components/Trust'
+import Results from './components/Results'
 import Footer from './components/Footer'
 import './App.css'
 
@@ -15,6 +16,7 @@ function App() {
       <UploadAnalyze />
       <HowItWorks />
       <Interpret />
+      <Results />
       <Trust />
       <Footer />
     </div>

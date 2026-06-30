@@ -33,6 +33,7 @@ export default function Navbar() {
           <a href="#analyze" className="nav-link">Analyze Scan</a>
           <a href="#how-it-works" className="nav-link">How It Works</a>
           <a href="#interpret" className="nav-link">Reading Results</a>
+          <a href="#results" className="nav-link">Results & Demo</a>
           <a href="#trust" className="nav-link">Safety & Accuracy</a>
           <button className="theme-toggle" onClick={() => setDark(!dark)} aria-label="Toggle dark mode">
             {dark ? (
