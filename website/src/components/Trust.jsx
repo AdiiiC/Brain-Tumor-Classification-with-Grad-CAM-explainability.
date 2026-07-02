@@ -31,7 +31,8 @@ export default function Trust() {
     <section id="trust" className="trust-section">
       <div className="container">
         <div className="section-header">
-          <h2 className="section-title">Safety & Accuracy</h2>
+          <span className="eyebrow">05 / Assurance</span>
+          <h2 className="section-title">Safety &amp; accuracy</h2>
           <p className="section-subtitle">
             Built with clinical safety in mind — transparent about capabilities and limitations.
           </p>
@@ -52,8 +53,9 @@ export default function Trust() {
         <div className="safeguards-grid">
           {safeguards.map((sg) => (
             <div className="safeguard-item" key={sg.title}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" stroke="var(--primary)" strokeWidth="1.6" strokeLinejoin="round"/>
+                <path d="M9 12l2 2 4-4" stroke="var(--primary)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
               <div>
                 <h4>{sg.title}</h4>
@@ -72,33 +74,33 @@ export default function Trust() {
               sequences (T1, T1-CE, T2, FLAIR) from BraTS 2021 — 2,000 images per
               sequence integrated into training data. Auto-detection adapts preprocessing
               per sequence type.
-              <span className="fixed-badge">Trained → 4 sequences</span>
+              <span className="fixed-badge">Trained / 4 sequences</span>
             </li>
             <li>
               <strong>Small tumor detection:</strong> Dedicated patch classifier trained
               on multi-scale patches (60px, 90px, 120px) from tumor vs. clean brain
               regions. Uses sliding window with NMS to detect lesions as small as ~3mm.
-              <span className="fixed-badge">Trained → patch_classifier.keras</span>
+              <span className="fixed-badge">Trained / patch_classifier.keras</span>
             </li>
             <li>
               <strong>WHO tumor grading:</strong> Binary grade classifier (HGG vs LGG)
               trained on DICOM-multi dataset (105 patients with explicit WHO grade labels)
               + LGG segmentation (111 patients) + BraTS high-grade data. Combined with
               image feature analysis for Grade I–IV estimation.
-              <span className="fixed-badge">Trained → grade_classifier.keras</span>
+              <span className="fixed-badge">Trained / grade_classifier.keras</span>
             </li>
             <li>
               <strong>Pediatric support:</strong> Bayesian re-weighting using published
               pediatric neuro-oncology epidemiology (CBTRUS/WHO). Actually adjusts model
               probabilities: P(class|image, age) ∝ P(class|image) × P(class|age) / P(class|adult).
               Includes age-group-specific priors, differentials, and workup recommendations.
-              <span className="fixed-badge">Fixed → Bayesian priors</span>
+              <span className="fixed-badge">Fixed / Bayesian priors</span>
             </li>
             <li>
               <strong>Image quality gating:</strong> Pre-inference quality assessment scores
               resolution, blur (Laplacian), SNR, compression artifacts, and brain coverage —
               low-quality scans are flagged with specific improvement recommendations.
-              <span className="fixed-badge">Fixed → /assess/quality</span>
+              <span className="fixed-badge">Fixed / assess/quality</span>
             </li>
           </ul>
         </div>

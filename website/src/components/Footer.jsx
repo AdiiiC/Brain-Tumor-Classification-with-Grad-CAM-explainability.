@@ -6,15 +6,15 @@ export default function Footer() {
       <div className="container">
         <div className="footer-content">
           <div className="footer-brand">
-            <h3>BrainScan AI Clinical</h3>
+            <h3>Aperture / neuro</h3>
             <p>AI-assisted brain tumor classification with explainability</p>
           </div>
 
           <div className="footer-links">
-            <a href="#analyze">Analyze Scan</a>
-            <a href="#how-it-works">How It Works</a>
-            <a href="#interpret">Reading Results</a>
-            <a href="#trust">Safety & Accuracy</a>
+            <a href="#analyze">Analyze scan</a>
+            <a href="#how-it-works">How it works</a>
+            <a href="#interpret">Reading results</a>
+            <a href="#trust">Safety &amp; accuracy</a>
           </div>
         </div>
 
@@ -28,7 +28,7 @@ export default function Footer() {
         </div>
 
         <div className="footer-bottom">
-          <p>&copy; {new Date().getFullYear()} BrainScan AI Clinical. For research and clinical decision support.</p>
+          <p>&copy; {new Date().getFullYear()} Aperture / neuro. For research and clinical decision support.</p>
         </div>
       </div>
     </footer>

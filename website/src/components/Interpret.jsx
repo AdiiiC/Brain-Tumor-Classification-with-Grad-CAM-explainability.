@@ -5,16 +5,17 @@ export default function Interpret() {
     <section id="interpret">
       <div className="container">
         <div className="section-header">
-          <h2 className="section-title">Reading Your Results</h2>
+          <span className="eyebrow">03 / Readout</span>
+          <h2 className="section-title">Reading your results</h2>
           <p className="section-subtitle">
             A guide to understanding the analysis output — what each section means clinically.
           </p>
         </div>
 
         <div className="interpret-grid">
-          <div className="card interpret-card">
-            <div className="interpret-icon green">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+          <div className="card interpret-card reticle">
+            <div className="interpret-icon signal">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.6"/><path d="M8 12l3 3 5-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </div>
             <h3>Classification</h3>
             <p>
@@ -25,9 +26,9 @@ export default function Interpret() {
             </p>
           </div>
 
-          <div className="card interpret-card">
-            <div className="interpret-icon blue">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
+          <div className="card interpret-card reticle">
+            <div className="interpret-icon signal">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 20V9M10 20V4M16 20v-7M4 20h16" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
             </div>
             <h3>Confidence Score</h3>
             <p>
@@ -37,9 +38,9 @@ export default function Interpret() {
             </p>
           </div>
 
-          <div className="card interpret-card">
-            <div className="interpret-icon amber">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M12 8v4M12 16h.01"/></svg>
+          <div className="card interpret-card reticle">
+            <div className="interpret-icon accent">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 18c2-7 3-10 4-10s1 5 2 5 1.5-8 2-8 1.5 6 2 8 1 5 2 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/><path d="M3 21h18" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
             </div>
             <h3>Uncertainty (±%)</h3>
             <p>
@@ -49,22 +50,22 @@ export default function Interpret() {
             </p>
           </div>
 
-          <div className="card interpret-card">
-            <div className="interpret-icon purple">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="4"/></svg>
+          <div className="card interpret-card reticle">
+            <div className="interpret-icon accent">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.6"/><circle cx="12" cy="12" r="4.5" stroke="currentColor" strokeWidth="1.6"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/></svg>
             </div>
             <h3>Visual Heatmap</h3>
             <p>
               The colored overlay shows which brain regions most influenced the classification.
-              <strong> Red/yellow areas</strong> = high importance.
-              <strong> Blue/green areas</strong> = low importance.
+              <strong> Warm areas</strong> = high importance.
+              <strong> Cool areas</strong> = low importance.
               Verify these align with clinically suspicious regions.
             </p>
           </div>
 
-          <div className="card interpret-card">
-            <div className="interpret-icon red">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+          <div className="card interpret-card reticle">
+            <div className="interpret-icon danger">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.6"/><path d="M12 8v5M12 16h.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
             </div>
             <h3>Review Flags</h3>
             <p>
@@ -74,9 +75,9 @@ export default function Interpret() {
             </p>
           </div>
 
-          <div className="card interpret-card">
-            <div className="interpret-icon teal">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+          <div className="card interpret-card reticle">
+            <div className="interpret-icon signal">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 3h8l4 4v14H6z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M14 3v4h4M9 13h6M9 17h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
             </div>
             <h3>Clinical Recommendation</h3>
             <p>

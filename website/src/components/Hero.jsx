@@ -6,12 +6,12 @@ export default function Hero() {
       <div className="container hero-content">
         <div className="hero-trust">
           <span className="trust-dot"></span>
-          AI-Assisted Diagnostic Tool
+          <span className="mono">AI-ASSISTED DIAGNOSTIC INSTRUMENT</span>
         </div>
 
         <h1 className="hero-title">
-          Brain MRI Analysis<br />
-          <span className="hero-subtitle-line">with Visual Explanation</span>
+          Brain MRI analysis<br />
+          <span className="hero-subtitle-line">with visual explanation</span>
         </h1>
 
         <p className="hero-desc">
@@ -22,25 +22,26 @@ export default function Hero() {
 
         <div className="hero-actions">
           <a href="#analyze" className="btn-primary">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.6"/>
+              <path d="M12 8v8M8 12h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
             </svg>
-            Upload & Analyze
+            Upload &amp; analyze
           </a>
-          <a href="#how-it-works" className="btn-secondary">Learn How It Works</a>
+          <a href="#how-it-works" className="btn-secondary">How it works</a>
         </div>
 
         <div className="hero-notes">
           <div className="hero-note">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
-            <span>Supports DICOM & standard image formats</span>
+            <span className="note-tick" aria-hidden="true"></span>
+            <span>Supports DICOM &amp; standard image formats</span>
           </div>
           <div className="hero-note">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+            <span className="note-tick" aria-hidden="true"></span>
             <span>Results include uncertainty scoring</span>
           </div>
           <div className="hero-note">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+            <span className="note-tick" aria-hidden="true"></span>
             <span>Visual heatmap for clinical transparency</span>
           </div>
         </div>
