@@ -41,7 +41,7 @@ class ImageQualityAssessor:
         # 1. Resolution check
         h, w = image.shape[:2]
         metrics["resolution"] = f"{w}x{h}"
-        metrics["resolution_adequate"] = min(w, h) >= self.MIN_RESOLUTION
+        metrics["resolution_adequate"] = bool(min(w, h) >= self.MIN_RESOLUTION)
         if not metrics["resolution_adequate"]:
             issues.append(f"Low resolution ({w}x{h}). Minimum recommended: {self.MIN_RESOLUTION}x{self.MIN_RESOLUTION}")
             recommendations.append("Re-acquire scan at higher resolution or use original DICOM files")
@@ -50,7 +50,7 @@ class ImageQualityAssessor:
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
         laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
         metrics["sharpness"] = round(float(laplacian_var), 2)
-        metrics["is_blurry"] = laplacian_var < self.MIN_LAPLACIAN_VAR
+        metrics["is_blurry"] = bool(laplacian_var < self.MIN_LAPLACIAN_VAR)
         if metrics["is_blurry"]:
             issues.append(f"Image appears blurry (sharpness={laplacian_var:.1f}, min={self.MIN_LAPLACIAN_VAR})")
             recommendations.append("Use original uncompressed scan or check for motion artifacts")
@@ -58,7 +58,7 @@ class ImageQualityAssessor:
         # 3. Noise estimation (SNR via median absolute deviation)
         snr = self._estimate_snr(gray)
         metrics["snr"] = round(float(snr), 2)
-        metrics["noisy"] = snr < self.MIN_SNR
+        metrics["noisy"] = bool(snr < self.MIN_SNR)
         if metrics["noisy"]:
             issues.append(f"High noise level detected (SNR={snr:.1f}, min={self.MIN_SNR})")
             recommendations.append("Check scanner calibration or use denoising preprocessing")
@@ -66,7 +66,7 @@ class ImageQualityAssessor:
         # 4. Compression artifacts (JPEG block detection)
         compression_score = self._detect_compression_artifacts(gray)
         metrics["compression_artifact_score"] = round(float(compression_score), 2)
-        metrics["heavily_compressed"] = compression_score > 0.5
+        metrics["heavily_compressed"] = bool(compression_score > 0.5)
         if metrics["heavily_compressed"]:
             issues.append("Significant compression artifacts detected")
             recommendations.append("Use lossless image format (PNG, TIFF, or DICOM)")
@@ -74,7 +74,7 @@ class ImageQualityAssessor:
         # 5. Brain coverage (is there actually brain tissue?)
         brain_coverage = self._estimate_brain_coverage(gray)
         metrics["brain_coverage"] = round(float(brain_coverage), 3)
-        metrics["sufficient_brain"] = brain_coverage > self.MIN_BRAIN_COVERAGE
+        metrics["sufficient_brain"] = bool(brain_coverage > self.MIN_BRAIN_COVERAGE)
         if not metrics["sufficient_brain"]:
             issues.append(f"Insufficient brain tissue visible ({brain_coverage*100:.1f}% coverage)")
             recommendations.append("Ensure the scan shows brain parenchyma, not just skull or background")
@@ -82,7 +82,7 @@ class ImageQualityAssessor:
         # 6. Dynamic range
         dynamic_range = float(gray.max()) - float(gray.min())
         metrics["dynamic_range"] = round(dynamic_range, 1)
-        metrics["low_contrast"] = dynamic_range < 50
+        metrics["low_contrast"] = bool(dynamic_range < 50)
         if metrics["low_contrast"]:
             issues.append("Very low contrast — image may be washed out")
             recommendations.append("Check window/level settings or use CLAHE enhancement")

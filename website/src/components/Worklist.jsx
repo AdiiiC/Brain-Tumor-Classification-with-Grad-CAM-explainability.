@@ -110,7 +110,7 @@ export default function Worklist() {
                       <span className="wl-file" title={row?.filename}>{row?.filename || '—'}</span>
                       <span className="wl-pred">{res.predicted_class ?? '—'}</span>
                       <span className="wl-num mono">
-                        {conf != null ? `${Number(conf).toFixed(1)}%` : '—'}
+                        {conf != null ? `${(Number(conf) * 100).toFixed(1)}%` : '—'}
                       </span>
                       <span className="wl-num">
                         {isError ? (

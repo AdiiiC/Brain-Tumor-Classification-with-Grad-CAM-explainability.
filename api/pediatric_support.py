@@ -169,6 +169,16 @@ class PediatricAssessor:
 
         return result
 
+    def _get_age_group(self, age: Optional[int]) -> str:
+        """Map a patient age to its epidemiological age-group label."""
+        if age is None:
+            return "Unknown"
+        for info in AGE_GROUPS.values():
+            low, high = info["range"]
+            if low <= age < high:
+                return info["label"]
+        return AGE_GROUPS["adult"]["label"]
+
     def _get_prior(self, age_group: str) -> dict:
         """Get the pediatric prior for the age group."""
         # Map age group label back to key
