@@ -11,10 +11,9 @@ Auto-detects the MRI sequence type from image characteristics:
 Adjusts preprocessing and confidence interpretation accordingly.
 """
 
-import numpy as np
-import cv2
-from typing import Optional
 
+import cv2
+import numpy as np
 
 # Sequence characteristics for preprocessing adaptation
 SEQUENCE_INFO = {
@@ -71,7 +70,7 @@ class SequenceDetector:
     between T1, T2, FLAIR, and DWI sequences.
     """
 
-    def detect(self, image: np.ndarray, dicom_metadata: Optional[dict] = None) -> dict:
+    def detect(self, image: np.ndarray, dicom_metadata: dict | None = None) -> dict:
         """
         Detect MRI sequence from image and/or DICOM metadata.
 

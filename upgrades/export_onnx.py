@@ -6,17 +6,24 @@ ONNX Runtime has optimized execution providers for CPU, GPU, and
 specialized hardware (TensorRT, OpenVINO, DirectML).
 """
 
-import numpy as np
 from pathlib import Path
+
+import numpy as np
 
 
 def export_to_onnx(
     keras_model_path: str = "model_best.keras",
     output_path: str = "brain_tumor_model.onnx",
     opset_version: int = 13,
+    include_logits: bool = True,
 ) -> str:
     """
     Convert Keras model to ONNX format.
+
+    With include_logits (the default) the graph emits both probabilities and pre-softmax
+    logits. The serving layer needs logits for temperature calibration and for the
+    free-energy OOD score — the latter is undefined from probabilities alone, since
+    log-probabilities always sum-exp to 1.
 
     Requires: pip install tf2onnx onnx onnxruntime
 
@@ -26,6 +33,9 @@ def export_to_onnx(
     import tf2onnx
 
     model = tf.keras.models.load_model(keras_model_path)
+
+    if include_logits:
+        model = _with_logit_output(model)
 
     # Convert
     input_signature = [tf.TensorSpec(shape=(None, 240, 240, 3), dtype=tf.float32, name="input")]
@@ -41,12 +51,26 @@ def export_to_onnx(
     return output_path
 
 
+def _with_logit_output(model):
+    """Wrap the model so it returns (probabilities, logits)."""
+    import tensorflow as tf
+
+    final = model.layers[-1]
+    logits = tf.keras.layers.Dense(final.units, activation=None, name="logits")(
+        model.layers[-2].output
+    )
+    dual = tf.keras.Model(model.inputs, [model.output, logits])
+    dual.get_layer("logits").set_weights(final.get_weights())
+    return dual
+
+
 def verify_onnx(onnx_path: str = "brain_tumor_model.onnx") -> dict:
     """
     Verify the ONNX model works and benchmark inference speed.
     """
-    import onnxruntime as ort
     import time
+
+    import onnxruntime as ort
 
     # Create session
     sess = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
@@ -68,7 +92,7 @@ def verify_onnx(onnx_path: str = "brain_tumor_model.onnx") -> dict:
 
     avg_ms = (elapsed / n_runs) * 1000
 
-    print(f"ONNX verification passed!")
+    print("ONNX verification passed!")
     print(f"Output shape: {result.shape}")
     print(f"Average inference: {avg_ms:.1f}ms ({1000/avg_ms:.0f} FPS)")
 

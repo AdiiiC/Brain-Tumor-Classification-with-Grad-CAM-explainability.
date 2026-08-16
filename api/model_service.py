@@ -4,26 +4,51 @@ Model service: loading, inference, Grad-CAM++, MC Dropout, TTA.
 Supports Keras (.keras) and TFLite (.tflite) models.
 """
 
-import io
 import base64
-from typing import Optional
-import numpy as np
-import cv2
-import tensorflow as tf
-from tensorflow.keras.models import Model, load_model
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from pathlib import Path
 
+import cv2
+import numpy as np
+
+from api.preprocessing import IMG_SIZE, preprocess_image, softmax
+
+# TensorFlow is optional so the app (and its test suite) can be imported without
+# it. Endpoints that need a model return 503 when it is unavailable.
+try:
+    import tensorflow as tf
+    from tensorflow.keras.models import Model, load_model
+    from tensorflow.keras.preprocessing.image import ImageDataGenerator
+    TF_AVAILABLE = True
+
+    class _AlwaysOnDropout(tf.keras.layers.Dropout):
+        """Dropout that keeps sampling at inference time (Monte-Carlo dropout)."""
+
+        def call(self, inputs, training=None):
+            return super().call(inputs, training=True)
+
+except ImportError:  # pragma: no cover - exercised only in TF-less environments
+    tf = None
+    Model = load_model = ImageDataGenerator = None
+    _AlwaysOnDropout = None
+    TF_AVAILABLE = False
+
 CLASS_NAMES = {0: "Glioma", 1: "Meningioma", 2: "No Tumor", 3: "Pituitary"}
-IMG_SIZE = (240, 240)
+
+__all__ = ["CLASS_NAMES", "IMG_SIZE", "TF_AVAILABLE", "ModelService"]
 
 
 class ModelService:
-    def __init__(self, model_path: str = "model_best.keras", tflite_path: Optional[str] = None):
+    def __init__(self, model_path: str = "model_best.keras", tflite_path: str | None = None):
         self.model = None
         self.interpreter = None
         self.model_type = "none"
         self._calibration_temp = 1.0  # temperature scaling (upgrade #9)
+        self._logit_model = None
+        self._feature_model = None
+        self._mc_model = None
+
+        if not TF_AVAILABLE:
+            return
 
         model_p = Path(model_path)
         tflite_p = Path(tflite_path) if tflite_path else None
@@ -48,36 +73,7 @@ class ModelService:
 
     def preprocess_image(self, image_bytes: bytes) -> np.ndarray:
         """Decode, crop, CLAHE-enhance, resize to 240×240."""
-        arr = np.frombuffer(image_bytes, np.uint8)
-        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-        if img is None:
-            raise ValueError("Could not decode image")
-        img = self._clahe_enhance(img)
-        img = self._crop_brain(img)
-        img = cv2.resize(img, IMG_SIZE)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        return img.astype(np.float32)
-
-    def _clahe_enhance(self, image: np.ndarray) -> np.ndarray:
-        lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
-        l, a, b = cv2.split(lab)
-        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-        l_enhanced = clahe.apply(l)
-        return cv2.cvtColor(cv2.merge((l_enhanced, a, b)), cv2.COLOR_LAB2BGR)
-
-    def _crop_brain(self, image: np.ndarray) -> np.ndarray:
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        blur = cv2.GaussianBlur(gray, (5, 5), 0)
-        thresh = cv2.threshold(blur, 45, 255, cv2.THRESH_BINARY)[1]
-        thresh = cv2.erode(thresh, None, iterations=2)
-        thresh = cv2.dilate(thresh, None, iterations=2)
-        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-        if not contours:
-            return image
-        c = max(contours, key=cv2.contourArea)
-        x, y, w, h = cv2.boundingRect(c)
-        cropped = image[y:y + h, x:x + w]
-        return cropped if cropped.size > 0 else image
+        return preprocess_image(image_bytes)
 
     # ── Inference ─────────────────────────────────────────────────────────
 
@@ -94,18 +90,59 @@ class ModelService:
             return self.interpreter.get_tensor(out["index"])[0].astype(np.float32)
         raise RuntimeError("No model loaded")
 
+    def _build_logit_model(self):
+        """Sub-model returning pre-softmax activations of the final dense layer."""
+        if self._logit_model is None:
+            final = self.model.layers[-1]
+            penultimate = self.model.layers[-2].output
+            logits = tf.keras.layers.Dense(
+                final.units, activation=None, name="logits",
+            )(penultimate)
+            logit_model = Model(self.model.inputs, logits)
+            logit_model.get_layer("logits").set_weights(final.get_weights())
+            self._logit_model = logit_model
+        return self._logit_model
+
+    def predict_logits(self, img: np.ndarray) -> np.ndarray:
+        """Pre-softmax logits. Falls back to log-probabilities for TFLite."""
+        if self.model_type != "keras":
+            probs = self.predict(img)
+            return np.log(np.clip(probs, 1e-12, None)).astype(np.float32)
+        batch = np.expand_dims(img, 0)
+        return self._build_logit_model().predict(batch, verbose=0)[0].astype(np.float32)
+
+    def extract_features(self, img: np.ndarray) -> np.ndarray | None:
+        """Penultimate-layer embedding, used for OOD scoring."""
+        if self.model_type != "keras":
+            return None
+        if self._feature_model is None:
+            self._feature_model = Model(self.model.inputs, self.model.layers[-2].output)
+        batch = np.expand_dims(img, 0)
+        return self._feature_model.predict(batch, verbose=0)[0].astype(np.float32).ravel()
+
     def predict_calibrated(self, img: np.ndarray) -> np.ndarray:
         """Prediction with temperature scaling (upgrade #9)."""
-        batch = np.expand_dims(img, 0)
         if self.model_type != "keras":
             return self.predict(img)
+        return softmax(self.predict_logits(img), self._calibration_temp)
 
-        # Get logits before softmax
-        logit_model = Model(self.model.input, self.model.layers[-1].output)
-        logits = logit_model.predict(batch, verbose=0)[0].astype(np.float32)
-        scaled = logits / self._calibration_temp
-        exp_scaled = np.exp(scaled - np.max(scaled))
-        return exp_scaled / exp_scaled.sum()
+    def _build_mc_model(self):
+        """Clone of the model with dropout left permanently active.
+
+        Calling the original model with ``training=True`` would also flip every
+        BatchNormalization layer to batch statistics; on a single image that
+        collapses the output to a near-uniform distribution.
+        """
+        if self._mc_model is None:
+            def clone_layer(layer):
+                if isinstance(layer, tf.keras.layers.Dropout):
+                    return _AlwaysOnDropout.from_config(layer.get_config())
+                return layer.__class__.from_config(layer.get_config())
+
+            mc_model = tf.keras.models.clone_model(self.model, clone_function=clone_layer)
+            mc_model.set_weights(self.model.get_weights())
+            self._mc_model = mc_model
+        return self._mc_model
 
     def predict_with_uncertainty(self, img: np.ndarray, n_iter: int = 50) -> tuple[np.ndarray, np.ndarray]:
         """Monte Carlo Dropout uncertainty estimation."""
@@ -113,8 +150,9 @@ class ModelService:
             probs = self.predict(img)
             return probs, np.zeros_like(probs)
         batch = np.expand_dims(img, 0)
+        mc_model = self._build_mc_model()
         preds = np.array([
-            self.model(batch, training=True).numpy()[0]
+            mc_model(batch, training=False).numpy()[0]
             for _ in range(n_iter)
         ], dtype=np.float32)
         return preds.mean(axis=0), preds.std(axis=0)
@@ -144,7 +182,9 @@ class ModelService:
             x for x in self.model.layers[::-1]
             if isinstance(x, tf.keras.layers.Conv2D)
         )
-        grad_model = Model(self.model.inputs, [last_conv.output, self.model.output])
+        # `model.outputs[0]` (not `model.output`) — Keras 3 returns the output
+        # struct, which is a list even for single-output models.
+        grad_model = Model(self.model.inputs, [last_conv.output, self.model.outputs[0]])
         batch = np.expand_dims(img, 0).astype("float32")
 
         with tf.GradientTape() as tape3:

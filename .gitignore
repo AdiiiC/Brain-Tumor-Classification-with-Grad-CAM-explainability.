@@ -11,6 +11,24 @@ build/
 .venv/
 venv/
 env/
+.venv-test/
+
+# Databases
+*.db
+*.sqlite3
+
+# OOD statistics (regenerate with scripts/fit_ood.py)
+ood_stats.npz
+
+# Local environment overrides
+.env
+.env.local
+
+# Coverage
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
 
 # Model artifacts (large binary files)
 *.keras

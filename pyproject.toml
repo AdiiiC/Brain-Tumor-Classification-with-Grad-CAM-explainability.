@@ -1,0 +1,19 @@
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+exclude = [".venv", ".venv-test", "datasets", "legacy", "upgrades"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
+ignore = [
+    "E501",   # line length is handled by the formatter
+    "B008",   # FastAPI depends on function calls in argument defaults
+    "SIM108", # ternaries are not always clearer here
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]
+# Pre-existing findings in modules untouched by the current work.
+"api/model_service.py" = ["E741"]
+"api/sequence_detector.py" = ["F841"]
+"api/shap_explainer.py" = ["F401"]

@@ -67,10 +67,15 @@ cd ..
 
 ### Option A: Kaggle API (recommended)
 
+> **Never commit `kaggle.json`.** Download your own token from
+> <https://www.kaggle.com/settings> → *Create New Token* and place it directly in
+> `~/.kaggle/`. The file is listed in `.gitignore`, and CI fails the build if it is ever
+> tracked again.
+
 ```bash
 # 1. Set up Kaggle credentials
 mkdir -p ~/.kaggle
-cp kaggle.json ~/.kaggle/kaggle.json
+mv ~/Downloads/kaggle.json ~/.kaggle/kaggle.json
 chmod 600 ~/.kaggle/kaggle.json
 pip install kaggle
 
@@ -168,21 +173,60 @@ python -c "from config import *; from model import build_model; m, e = build_mod
 The API serves the model for the React frontend.
 
 ```bash
-# From project root
-cd api
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+# From the project root (not from inside api/ — the package uses absolute imports)
+uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### Configuration
+
+Copy `.env.example` to `.env` and adjust as needed. All settings have safe defaults for
+local development.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `API_KEYS` | *(unset)* | Comma-separated keys. When unset, authentication is disabled (local dev only). |
+| `ALLOWED_ORIGINS` | `http://localhost:5173` | Comma-separated CORS origins. Never use `*` in production. |
+| `RATE_LIMIT_ENABLED` | `true` | Set to `false` to disable rate limiting. |
+| `DATABASE_URL` | `sqlite:///./brainscan.db` | Study storage. Use a `postgresql://` URL in production. |
+| `CALIBRATION_TEMP` | `1.5` | Temperature scaling applied to logits. |
+| `MODEL_VERSION` | `efficientnetb1-v1` | Stamped onto every result for traceability. |
+| `OOD_STATS_PATH` | `ood_stats.npz` | Fitted out-of-distribution statistics (optional). |
+| `LOG_LEVEL` | `INFO` | Logging level for the structured JSON logger. |
+
+When `API_KEYS` is set, send the key as an `X-API-Key` header, and give the frontend the
+matching `VITE_API_KEY`.
+
+### Fit the out-of-distribution detector (optional but recommended)
+
+Without fitted statistics the API falls back to free-energy scoring. Fitting the
+Mahalanobis detector on your training data makes rejection of non-brain-MRI inputs far
+more reliable:
+
+```bash
+python -m scripts.fit_ood --data-dir datasets/brain-tumor-mri-dataset/Training
+# writes ood_stats.npz, picked up automatically on the next API start
 ```
 
 ### API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/health` | Health check |
+| GET | `/health` | Health check, model status and build metadata |
+| GET | `/metrics` | Prometheus metrics |
 | POST | `/predict` | Single image classification |
 | POST | `/predict/batch` | Batch classification |
 | POST | `/explain/gradcam` | Grad-CAM++ heatmap |
 | POST | `/explain/shap` | SHAP pixel attribution |
+| POST | `/segment` | Tumor mask + volumetry |
 | POST | `/analyze` | Full analysis (prediction + Grad-CAM + recommendation) — used by frontend |
+| POST | `/analyze/comprehensive` | All clinical modules in one call |
+| GET | `/studies` | List stored studies |
+| GET | `/studies/{id}` | Retrieve a stored study |
+| POST | `/studies/{id}/feedback` | Record a radiologist's review |
+| GET | `/studies/{id}/report` | Download the study PDF |
+| GET | `/patients/{id}/timeline` | Longitudinal growth tracking |
+
+Full interactive documentation is at `http://localhost:8000/docs`.
 
 ### Test the API
 
@@ -194,10 +238,24 @@ curl http://localhost:8000/health
 curl -X POST http://localhost:8000/predict \
   -F "file=@datasets/brain-tumor-classification-sartaj/Testing/glioma_tumor/image_1.jpg"
 
-# Full analysis (used by the website)
-curl -X POST http://localhost:8000/analyze \
+# Full analysis (used by the website), grouped under a patient for timeline tracking
+curl -X POST "http://localhost:8000/analyze?patient_id=PT-001" \
   -F "file=@datasets/brain-tumor-classification-sartaj/Testing/glioma_tumor/image_1.jpg"
+
+# Download the PDF report for a study
+curl -o report.pdf http://localhost:8000/studies/<study_id>/report
 ```
+
+### Run the automated tests
+
+```bash
+pip install -r requirements-dev.txt
+ruff check api tests scripts
+pytest
+```
+
+The suite stubs the model, so TensorFlow and the trained weights are not required. This is
+the same set of checks GitHub Actions runs on every push.
 
 ---
 

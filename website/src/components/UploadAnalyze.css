@@ -461,6 +461,84 @@
   font-size: 0.85rem;
 }
 
+.ood-alert {
+  padding: 0.8rem 0.95rem;
+  border: 1px solid var(--danger);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.patient-field.wide {
+  margin-top: 0.7rem;
+  width: 100%;
+}
+
+.patient-field.wide input {
+  width: 100%;
+}
+
+.actions-block .action-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin: 0.6rem 0;
+}
+
+.actions-block .action-row.wrap {
+  flex-wrap: wrap;
+}
+
+.btn-action {
+  padding: 0.55rem 1rem;
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+  background: var(--primary);
+  color: var(--bg-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.btn-action:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.btn-action:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-verdict {
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.btn-verdict:hover:not(:disabled) {
+  border-color: var(--primary);
+}
+
+.btn-verdict.active {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  font-weight: 600;
+}
+
+.btn-verdict:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .chip-row {
   display: flex;
   gap: 0.6rem;

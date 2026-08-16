@@ -8,8 +8,6 @@ Addresses differences between adult and pediatric brain tumors:
 - Growth chart context for tumor size assessment
 """
 
-import numpy as np
-from typing import Optional
 
 
 # Pediatric brain tumor epidemiology
@@ -117,8 +115,8 @@ class PediatricAssessor:
         predicted_class: str,
         confidence: float,
         probabilities: dict,
-        patient_age: Optional[int] = None,
-        patient_sex: Optional[str] = None,
+        patient_age: int | None = None,
+        patient_sex: str | None = None,
     ) -> dict:
         """
         Generate pediatric-adjusted assessment with Bayesian re-weighted probabilities.
@@ -169,7 +167,7 @@ class PediatricAssessor:
 
         return result
 
-    def _get_age_group(self, age: Optional[int]) -> str:
+    def _get_age_group(self, age: int | None) -> str:
         """Map a patient age to its epidemiological age-group label."""
         if age is None:
             return "Unknown"
@@ -219,7 +217,7 @@ class PediatricAssessor:
         if total > 0:
             reweighted = {k: v / total for k, v in reweighted.items()}
         else:
-            reweighted = {k: 0.25 for k in reweighted}
+            reweighted = dict.fromkeys(reweighted, 0.25)
 
         return reweighted
 

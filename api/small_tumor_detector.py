@@ -11,9 +11,9 @@ Strategy:
 4. Size estimation: approximate tumor dimensions in mm
 """
 
-import numpy as np
+
 import cv2
-from typing import Optional
+import numpy as np
 
 
 class SmallTumorDetector:
@@ -37,7 +37,10 @@ class SmallTumorDetector:
     def _load_patch_model(self):
         """Load the trained patch classifier if available."""
         from pathlib import Path
-        import tensorflow as tf
+        try:
+            import tensorflow as tf
+        except ImportError:
+            return
         patch_path = Path("patch_classifier.keras")
         if patch_path.exists():
             try:
@@ -49,7 +52,7 @@ class SmallTumorDetector:
         self,
         image: np.ndarray,
         model,
-        pixel_spacing: Optional[float] = None,
+        pixel_spacing: float | None = None,
         sensitivity: str = "high",
     ) -> dict:
         """

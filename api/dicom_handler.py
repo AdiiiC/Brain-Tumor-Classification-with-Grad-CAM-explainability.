@@ -6,6 +6,7 @@ compatible with the model pipeline. Handles standard brain MRI DICOM series.
 """
 
 import io
+
 import numpy as np
 
 try:

@@ -7,3 +7,19 @@ services:
     envVars:
       - key: PORT
         value: 8000
+      # Generated once by Render, then reused. Send it as the X-API-Key header.
+      - key: API_KEYS
+        generateValue: true
+      # Set this to the deployed frontend origin. Never use "*".
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: RATE_LIMIT_ENABLED
+        value: "true"
+      - key: CALIBRATION_TEMP
+        value: "1.5"
+      - key: LOG_LEVEL
+        value: INFO
+      # Point at a managed Postgres instance to keep studies across deploys;
+      # the SQLite default is lost when the free-tier container restarts.
+      - key: DATABASE_URL
+        sync: false

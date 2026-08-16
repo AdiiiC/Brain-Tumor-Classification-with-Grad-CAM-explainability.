@@ -27,7 +27,13 @@ Classifies brain MRI scans into 4 categories: **Glioma**, **Meningioma**, **Pitu
 - **Grade Classifier** — MobileNetV2 (240×240) trained on HGG/LGG data for binary glioma grading
 - **Patch Classifier** — MobileNetV2 (120×120) trained on tumor/clean patches for small tumor detection
 - **Doctor-Friendly React Website** — clinical UI with dark mode, upload-and-analyze, visual explanations, live results page
-- **FastAPI Backend** — 16 REST endpoints for prediction, explainability, quality assessment, and comprehensive analysis
+- **FastAPI Backend** — 21 REST endpoints for prediction, explainability, quality assessment, segmentation, review and reporting
+- **Out-of-Distribution Detection** — Mahalanobis + free-energy scoring rejects non-brain-MRI inputs instead of confidently mislabelling them
+- **Tumor Segmentation & Volumetry** — mask, area, max diameter and volume in mm³/cm³, using DICOM pixel spacing when available
+- **Study Persistence & Longitudinal Tracking** — every analysis is stored (SQLite/Postgres) and grouped per patient to measure growth between scans
+- **Radiologist Feedback Loop** — reviewers confirm or correct each result, building a labelled dataset for retraining
+- **PDF Reports** — one-click study report with findings, volumetry, Grad-CAM++ overlay, review status and longitudinal comparison
+- **Production Hardening** — API-key auth, tiered rate limiting, strict CORS, magic-byte upload validation, structured JSON logging, Prometheus `/metrics`
 - **Multi-Dataset Test Suite** — checkpoint/resume system that tests across 5 datasets (21,732 images)
 - **19 Upgrade Modules** — ViT, 3D CNN, U-Net segmentation, federated learning, knowledge distillation, GAN augmentation, and more
 - **Docker + Cloud Deployment** — Docker, Vercel (frontend), Render (backend)
@@ -73,8 +79,10 @@ Classifies brain MRI scans into 4 categories: **Glioma**, **Meningioma**, **Pitu
 | Model | TensorFlow/Keras, EfficientNetB1 (main), MobileNetV2 (grade + patch), mixed_float16 |
 | Explainability | Grad-CAM++, SHAP DeepExplainer, Attention Rollout |
 | Backend | FastAPI, Uvicorn, Pydantic, pydicom |
+| Serving | TensorFlow (full features) or ONNX Runtime (slim, classification only) |
+| Persistence | SQLAlchemy 2.0, SQLite (default) / PostgreSQL, ReportLab (PDF) |
 | Frontend | React 18, Vite, CSS custom properties (light/dark theme) |
-| Testing | scikit-learn metrics, multi-dataset checkpoint/resume (5 datasets, 21,732 images) |
+| Testing | pytest (123 tests), ruff, GitHub Actions CI, scikit-learn metrics, multi-dataset checkpoint/resume (5 datasets, 21,732 images) |
 | Deployment | Docker, Vercel (frontend), Render (backend) |
 | Data | OpenCV, CLAHE preprocessing, offline augmentation oversampling |
 
@@ -82,15 +90,34 @@ Classifies brain MRI scans into 4 categories: **Glioma**, **Meningioma**, **Pitu
 
 ## Test Results
 
-Tested across 5 independent datasets (21,732 total images):
+Tested across 5 independent datasets (21,732 total images). Accuracies are reported with
+95% Wilson score confidence intervals — on a few hundred images the interval is wide
+enough that small differences between models are not meaningful.
 
-| Dataset | Images | Task | Accuracy |
-|---------|--------|------|----------|
-| Standard MRI Scans | 1,311 | 4-class tumor type | 84.26% |
-| Hospital MRI Collection | 2,870 | 4-class tumor type | 85.50% |
-| Clinical Detection Set | 253 | Tumor vs. healthy | 83.40% |
-| Confirmed Tumor Scans | 3,064 | Tumor type identification | 100.00% |
-| FLAIR Sequence MRIs | 3,929 | Tumor vs. healthy (FLAIR) | 77.50% |
+| Dataset | Images | Task | Accuracy (95% CI) |
+|---------|--------|------|-------------------|
+| Standard MRI Scans | 1,311 | 4-class tumor type | 84.26% [82.2–86.2] |
+| Hospital MRI Collection | 2,870 | 4-class tumor type | 85.50% [84.2–86.8] |
+| Clinical Detection Set | 253 | Tumor vs. healthy | 83.40% [78.3–87.5] |
+| Confirmed Tumor Scans | 3,064 | Tumor type identification | 100.00% [99.9–100] |
+| FLAIR Sequence MRIs | 3,929 | Tumor vs. healthy (FLAIR) | 77.50% [76.2–78.8] |
+
+> **Reading these numbers.** Overall accuracy is the wrong headline for a medical model:
+> a missed glioma and a false meningioma are not equivalent errors. What matters is
+> **per-class sensitivity** — of the patients who actually have a glioma, how many did the
+> model catch. Accuracy can stay high while a minority class is systematically missed.
+>
+> The 100% result on Confirmed Tumor Scans is a case in point: that dataset contains only
+> tumor-positive images, so it measures type discrimination among known tumors and says
+> nothing about the model's ability to rule out disease.
+
+To generate per-class sensitivity, specificity and PPV with confidence intervals, plus a
+confusion matrix showing where missed cases went:
+
+```bash
+python -m scripts.evaluate --data-dir datasets/brain-tumor-mri-dataset/Testing \
+  --markdown results.md --json results.json
+```
 
 Training data: 21,732 images balanced across 4 classes using offline augmentation oversampling, including T1, T1CE, T2, and FLAIR MRI sequences from BraTS 2021.
 
@@ -201,6 +228,20 @@ cd website && npm install && npm run dev
 # Open http://localhost:5173
 ```
 
+Copy `.env.example` to `.env` to configure API keys, CORS origins, the database URL and
+calibration temperature.
+
+### Running the tests
+
+```bash
+pip install -r requirements-dev.txt
+ruff check api tests scripts
+pytest                       # 123 tests, no TensorFlow required
+```
+
+The test suite stubs the model, so it runs in about a second and is safe to run in CI
+without downloading weights.
+
 See [SETUP.md](SETUP.md) for the complete guide including dataset downloads, Docker deployment, training, and test suite usage.
 
 ---
@@ -248,11 +289,13 @@ python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/health` | Health check |
+| `GET` | `/health` | Health check, model status and build metadata |
+| `GET` | `/metrics` | Prometheus metrics (requests, latency, predictions, OOD rejections) |
 | `POST` | `/predict` | Single image → class + confidence |
 | `POST` | `/predict/batch` | Multiple images |
 | `POST` | `/explain/gradcam` | Grad-CAM++ heatmap |
 | `POST` | `/explain/shap` | SHAP pixel attribution |
+| `POST` | `/segment` | Tumor mask + volumetry (area, diameter, mm³/cm³) |
 | `POST` | `/analyze` | Full analysis (prediction + Grad-CAM + recommendation) |
 | `POST` | `/assess/quality` | Image quality score (resolution, blur, SNR, compression) |
 | `POST` | `/assess/sequence` | Auto-detect MRI sequence (T1/T1CE/T2/FLAIR/DWI) |
@@ -260,6 +303,45 @@ python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
 | `POST` | `/assess/pediatric` | Pediatric assessment with Bayesian re-weighting |
 | `POST` | `/detect/small-tumors` | Small tumor detection via patch-based sliding window |
 | `POST` | `/analyze/comprehensive` | All modules combined in one call |
+| `GET` | `/studies` | List stored studies (filter by patient, flagged-only) |
+| `GET` | `/studies/{id}` | Retrieve a single stored study |
+| `POST` | `/studies/{id}/feedback` | Radiologist confirms or corrects the AI result |
+| `GET` | `/studies/{id}/report` | Download the study PDF report |
+| `GET` | `/patients/{id}/timeline` | Longitudinal growth tracking across a patient's scans |
+
+Every clinical endpoint returns `model_version` and `git_sha` so any result can be traced
+back to the exact code and weights that produced it.
+
+### Serving backends
+
+| Backend | Image size | Cold start | Endpoints |
+|---------|-----------|------------|-----------|
+| Keras (default) | ~1.4 GB | slow | all 21 |
+| ONNX Runtime | ~400 MB | fast | all except Grad-CAM++ / SHAP |
+
+Set `MODEL_BACKEND=onnx` to serve from ONNX Runtime. `auto` (the default) prefers Keras
+when it is importable and falls back to ONNX.
+
+```bash
+# Export first — include_logits keeps calibration and OOD scoring meaningful
+python -c "from upgrades.export_onnx import export_to_onnx; export_to_onnx()"
+docker build -f Dockerfile.onnx -t brainscan-api:onnx .
+```
+
+> **The trade-off is explainability.** Grad-CAM++ needs gradients with respect to
+> intermediate activations, which ONNX Runtime does not expose. Those endpoints return
+> 400 on the ONNX backend rather than silently substituting a weaker attribution method,
+> and `/health` reports `explainability_available: false`. For a diagnostic-support tool
+> the heatmap is much of the clinical value, so the slim image suits high-throughput
+> triage rather than a full replacement.
+
+### Security
+
+Authentication is enabled by setting `API_KEYS` (comma-separated). When it is unset the API
+runs open for local development. Requests then need an `X-API-Key` header; the frontend
+sends it via `VITE_API_KEY`. Rate limits are 60/min for standard endpoints, 10/min for
+heavy ones (Grad-CAM, SHAP, comprehensive) and 5/min for batch. `ALLOWED_ORIGINS` controls
+CORS and never defaults to `*`.
 
 ---
 

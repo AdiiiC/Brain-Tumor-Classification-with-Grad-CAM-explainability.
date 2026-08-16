@@ -5,14 +5,15 @@ Provides pixel-level feature attribution using SHAP (SHapley Additive exPlanatio
 Complements Grad-CAM++ with theoretically grounded importance scores.
 """
 
-import io
 import base64
+import io
+
 import numpy as np
 
 try:
+    import matplotlib
     import shap
     import tensorflow as tf
-    import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     SHAP_AVAILABLE = True

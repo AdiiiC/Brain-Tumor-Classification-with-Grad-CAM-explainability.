@@ -12,10 +12,9 @@ Grade Estimation Logic:
 - No Tumor: N/A
 """
 
-import numpy as np
-import cv2
-from typing import Optional
 
+import cv2
+import numpy as np
 
 # WHO Grade descriptions
 GRADE_INFO = {
@@ -64,7 +63,10 @@ class TumorGrader:
     def _load_grade_model(self):
         """Load the trained binary grade classifier if available."""
         from pathlib import Path
-        import tensorflow as tf
+        try:
+            import tensorflow as tf
+        except ImportError:
+            return
         grade_path = Path("grade_classifier.keras")
         if grade_path.exists():
             try:
@@ -77,8 +79,8 @@ class TumorGrader:
         predicted_class: str,
         confidence: float,
         probabilities: dict,
-        image: Optional[np.ndarray] = None,
-        heatmap: Optional[np.ndarray] = None,
+        image: np.ndarray | None = None,
+        heatmap: np.ndarray | None = None,
     ) -> dict:
         """
         Estimate WHO grade based on tumor type and image characteristics.
@@ -248,7 +250,7 @@ class TumorGrader:
         max_var = local_var.max() if local_var.max() > 0 else 1.0
         return float(local_var.mean() / max_var)
 
-    def _estimate_tumor_size(self, image: np.ndarray, heatmap: Optional[np.ndarray] = None) -> float:
+    def _estimate_tumor_size(self, image: np.ndarray, heatmap: np.ndarray | None = None) -> float:
         """Estimate tumor size as fraction of total brain area using heatmap."""
         if heatmap is not None:
             # Use Grad-CAM activation as tumor region proxy
@@ -265,7 +267,7 @@ class TumorGrader:
             _, bright = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
             return float(bright.sum() / 255) / (gray.shape[0] * gray.shape[1])
 
-    def _classify_enhancement(self, image: np.ndarray, heatmap: Optional[np.ndarray] = None) -> str:
+    def _classify_enhancement(self, image: np.ndarray, heatmap: np.ndarray | None = None) -> str:
         """Classify enhancement pattern: ring, homogeneous, or heterogeneous."""
         if heatmap is None:
             return "unknown"

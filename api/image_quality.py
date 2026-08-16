@@ -9,9 +9,9 @@ Pre-inference quality checks:
 - Brain region coverage
 """
 
-import numpy as np
+
 import cv2
-from typing import Optional
+import numpy as np
 
 
 class ImageQualityAssessor:

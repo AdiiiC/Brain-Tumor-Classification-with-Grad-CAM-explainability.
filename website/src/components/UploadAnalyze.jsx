@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { postFile, cleanText } from './api'
+import { postFile, cleanText, downloadReport, submitFeedback } from './api'
 import SmallTumors from './SmallTumors'
 import './UploadAnalyze.css'
 
 const affinityTone = { high: 'high', moderate: 'moderate', low: 'low', unknown: 'muted' }
+const TUMOR_CLASSES = ['Glioma', 'Meningioma', 'No Tumor', 'Pituitary']
 
 export default function UploadAnalyze() {
   const [file, setFile] = useState(null)
@@ -16,9 +17,12 @@ export default function UploadAnalyze() {
   const [fullMode, setFullMode] = useState(false)
   const [patientAge, setPatientAge] = useState('')
   const [patientSex, setPatientSex] = useState('')
+  const [patientId, setPatientId] = useState('')
 
   const [explainTab, setExplainTab] = useState('gradcam')
   const [shap, setShap] = useState({ loading: false, image: null, error: null })
+  const [report, setReport] = useState({ loading: false, error: null })
+  const [feedback, setFeedback] = useState({ saving: false, saved: null, error: null })
 
   const handleFile = (f) => {
     if (!f) return
@@ -26,6 +30,8 @@ export default function UploadAnalyze() {
     setResult(null)
     setError(null)
     setShap({ loading: false, image: null, error: null })
+    setFeedback({ saving: false, saved: null, error: null })
+    setReport({ loading: false, error: null })
     setExplainTab('gradcam')
     const reader = new FileReader()
     reader.onload = (e) => setPreview(e.target.result)
@@ -44,13 +50,15 @@ export default function UploadAnalyze() {
     setLoading(true)
     setError(null)
     setShap({ loading: false, image: null, error: null })
+    setFeedback({ saving: false, saved: null, error: null })
+    setReport({ loading: false, error: null })
     setExplainTab('gradcam')
 
     try {
       const path = fullMode ? '/analyze/comprehensive' : '/analyze'
       const params = fullMode
-        ? { patient_age: patientAge, patient_sex: patientSex }
-        : undefined
+        ? { patient_age: patientAge, patient_sex: patientSex, patient_id: patientId }
+        : { patient_id: patientId }
       const data = await postFile(path, file, { params })
       if (!data || !data.prediction) {
         throw new Error('The server returned an unexpected response. Please try again.')
@@ -63,6 +71,28 @@ export default function UploadAnalyze() {
       )
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleDownloadReport = async () => {
+    if (!result?.study_id) return
+    setReport({ loading: true, error: null })
+    try {
+      await downloadReport(result.study_id)
+      setReport({ loading: false, error: null })
+    } catch (err) {
+      setReport({ loading: false, error: err?.message || 'Could not generate the report.' })
+    }
+  }
+
+  const handleFeedback = async (correctedClass) => {
+    if (!result?.study_id) return
+    setFeedback({ saving: true, saved: null, error: null })
+    try {
+      const saved = await submitFeedback(result.study_id, { corrected_class: correctedClass })
+      setFeedback({ saving: false, saved, error: null })
+    } catch (err) {
+      setFeedback({ saving: false, saved: null, error: err?.message || 'Could not save your review.' })
     }
   }
 
@@ -92,6 +122,8 @@ export default function UploadAnalyze() {
     setResult(null)
     setError(null)
     setShap({ loading: false, image: null, error: null })
+    setFeedback({ saving: false, saved: null, error: null })
+    setReport({ loading: false, error: null })
     setExplainTab('gradcam')
   }
 
@@ -106,6 +138,9 @@ export default function UploadAnalyze() {
   const grading = result?.grading
   const pediatric = result?.pediatric
   const dicom = result?.dicom_metadata
+  const ood = result?.out_of_distribution
+  const segmentation = result?.segmentation
+  const isOod = ood?.is_out_of_distribution === true
   const lowQuality = quality?.overall_score != null && quality.overall_score < 50
   const clamp = (n) => Math.max(0, Math.min(100, Number(n) || 0))
 
@@ -193,6 +228,17 @@ export default function UploadAnalyze() {
                       </label>
                     </div>
                   )}
+
+                  <label className="patient-field wide">
+                    <span className="mono">Patient ID</span>
+                    <input
+                      type="text"
+                      maxLength="64"
+                      placeholder="optional — links scans into a timeline"
+                      value={patientId}
+                      onChange={(e) => setPatientId(e.target.value)}
+                    />
+                  </label>
                 </div>
 
                 <div className="preview-actions">
@@ -250,6 +296,14 @@ export default function UploadAnalyze() {
 
             {result && prediction && (
               <div className="results-content">
+                {isOod && (
+                  <div className="ood-alert">
+                    <strong>Out-of-distribution input.</strong>{' '}
+                    {cleanText(ood.message)} The classification below is shown for transparency
+                    only and must not be used clinically.
+                  </div>
+                )}
+
                 {lowQuality && (
                   <div className="quality-alert">
                     <strong>Low image quality (score {quality.overall_score}).</strong>{' '}
@@ -457,6 +511,44 @@ export default function UploadAnalyze() {
                   </div>
                 )}
 
+                {segmentation?.measurements && (
+                  <div className="detail-block">
+                    <h4>Volumetry</h4>
+                    <div className="qm-grid">
+                      <div className="qm">
+                        <span className="mono">Volume</span>
+                        <b className="mono">{segmentation.measurements.volume_cm3} cm³</b>
+                      </div>
+                      <div className="qm">
+                        <span className="mono">Max diameter</span>
+                        <b className="mono">{segmentation.measurements.max_diameter_mm} mm</b>
+                      </div>
+                      <div className="qm">
+                        <span className="mono">Area</span>
+                        <b className="mono">{segmentation.measurements.area_mm2} mm²</b>
+                      </div>
+                      <div className="qm">
+                        <span className="mono">Slice thickness</span>
+                        <b className="mono">{segmentation.measurements.slice_thickness_mm} mm</b>
+                      </div>
+                    </div>
+                    {segmentation.overlay_base64 && (
+                      <img
+                        src={`data:image/png;base64,${segmentation.overlay_base64}`}
+                        alt="Tumor segmentation boundary"
+                        className="gradcam-img"
+                      />
+                    )}
+                    <p className="detail-note">{cleanText(segmentation.note)}</p>
+                    {segmentation.spacing_estimated && (
+                      <p className="detail-disclaimer">
+                        Pixel spacing was not supplied — measurements assume 1.0 mm/px and a
+                        5 mm slice. Upload DICOM for true physical dimensions.
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {dicom && (
                   <div className="detail-block">
                     <h4>DICOM metadata</h4>
@@ -530,6 +622,48 @@ export default function UploadAnalyze() {
                 )}
 
                 {file && <SmallTumors file={file} preview={preview} />}
+
+                {result.study_id && (
+                  <div className="detail-block actions-block">
+                    <h4>Clinical actions</h4>
+
+                    <div className="action-row">
+                      <button
+                        className="btn-action"
+                        onClick={handleDownloadReport}
+                        disabled={report.loading}
+                      >
+                        {report.loading ? 'Preparing PDF…' : 'Download PDF report'}
+                      </button>
+                      <span className="detail-muted mono">Study {result.study_id.slice(0, 8)}</span>
+                    </div>
+                    {report.error && <p className="detail-note warn">{report.error}</p>}
+
+                    <p className="detail-lead">Radiologist review</p>
+                    <p className="detail-note">
+                      Confirm or correct the AI result. Corrections are stored as training signal.
+                    </p>
+                    <div className="action-row wrap">
+                      {TUMOR_CLASSES.map((cls) => (
+                        <button
+                          key={cls}
+                          className={`btn-verdict ${feedback.saved?.corrected_class === cls ? 'active' : ''}`}
+                          onClick={() => handleFeedback(cls)}
+                          disabled={feedback.saving}
+                        >
+                          {cls === prediction.class ? `Confirm ${cls}` : cls}
+                        </button>
+                      ))}
+                    </div>
+                    {feedback.saved && (
+                      <p className="detail-note">
+                        Recorded as <b>{feedback.saved.corrected_class}</b>
+                        {feedback.saved.agrees_with_ai ? ' — agrees with AI.' : ' — disagrees with AI.'}
+                      </p>
+                    )}
+                    {feedback.error && <p className="detail-note warn">{feedback.error}</p>}
+                  </div>
+                )}
 
                 <button className="btn-new-scan" onClick={resetForm}>Analyze another scan</button>
               </div>
